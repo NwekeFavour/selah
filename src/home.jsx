@@ -677,7 +677,7 @@ export default function Home({ onStart, onEnter }) {
       <main id="top">
         <section className="mx-auto grid max-w-6xl lg:items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[0.7fr_1fr] md:items-start md:grid-cols-2 lg:pt-16">
           <div>
-            <h1 className="text-[40px]! sm:text-[42px]! text-start font-semibold! leading-[1.1] tracking-tight md:text-[45px]! lg:text-[60px]!">
+            <h1 className="text-[40px]! sm:text-[42px]! text-start font-semibold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[60px]!">
               Big meetings, <span className="text-[#6495c4]">one voice</span> at
               a time
               <Sparkle className="ml-2 inline h-6 w-6 text-slate-900" />
@@ -721,7 +721,7 @@ export default function Home({ onStart, onEnter }) {
         <Wave fill="#EEF2F7" />
         <section className="bg-[#EEF2F7]">
           <div className="mx-auto grid max-w-6xl gap-8 px-6 py-10 md:grid-cols-[1fr_auto_1.2fr] md:items-center">
-            <h2 className="text-3xl font-semibold leading-tight tracking-tight">
+            <h2 className="text-3xl text-black font-semibold leading-tight tracking-tight">
               Ready to host your next big meeting?
             </h2>
             <span className="hidden h-24 w-px bg-slate-300 md:block" />
@@ -744,7 +744,7 @@ export default function Home({ onStart, onEnter }) {
 
         <section id="product" className="mx-auto max-w-6xl px-6 pb-20 pt-4">
           <div className="mb-10 text-center">
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="text-3xl text-black font-semibold tracking-tight sm:text-4xl">
               <svg
                 viewBox="0 0 40 24"
                 className="mr-3 inline h-6 w-9 text-[#6495c4]"
@@ -803,7 +803,7 @@ export default function Home({ onStart, onEnter }) {
         </section>
 
         <section id="plans" className="mx-auto max-w-6xl px-6 pb-24">
-          <h2 className="text-center text-3xl font-semibold tracking-tight">
+          <h2 className="text-center text-black text-3xl font-semibold tracking-tight">
             Start free. Grow when your room does.
           </h2>
           <div className="mt-10 grid divide-slate-200 md:grid-cols-3 md:divide-x">
@@ -841,7 +841,7 @@ export default function Home({ onStart, onEnter }) {
       <Wave fill="#EEF2F7" />
       <footer className="bg-[#EEF2F7] px-6 pb-8 pt-6 text-white">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-          <h2 className="max-w-md text-3xl font-semibold tracking-tight">
+          <h2 className="max-w-md  text-black text-3xl font-semibold tracking-tight">
             Give your next meeting some order.
           </h2>
           <a
