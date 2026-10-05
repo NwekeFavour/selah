@@ -667,7 +667,7 @@ export default function Home({ onStart, onEnter }) {
           </a>
         </nav>
         <button
-          onClick={onStart}
+          onClick={() => setOpen(true)}
           className="px-4 py-2 text-sm text-slate-100 font-semibold transition bg-[#6495c4] hover:text-white"
         >
           Start a Selah
@@ -677,7 +677,7 @@ export default function Home({ onStart, onEnter }) {
       <main id="top">
         <section className="mx-auto grid max-w-6xl lg:items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[0.7fr_1fr] md:items-start md:grid-cols-2 lg:pt-16">
           <div>
-            <h1 className="text-[40px]! sm:text-[42px]! text-start font-semibold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[60px]!">
+            <h1 className="text-[40px]! sm:text-[42px]! text-start font-bold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[60px]!">
               Big meetings, <span className="text-[#6495c4]">one voice</span> at
               a time
               <Sparkle className="ml-2 inline h-6 w-6 text-slate-900" />
