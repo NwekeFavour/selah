@@ -211,7 +211,7 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
                   copied ? "bg-[#2E9E8F]" : "bg-[#6495c4] hover:bg-slate-900"
                 }`}
               >
-                {copied ? "Copied" : "Copy link"}
+                {copied ? "Copied" : "Copy for later"}
               </button>
             </div>
             <p className="sr-only" aria-live="polite">{copied ? "Link copied to clipboard" : ""}</p>
