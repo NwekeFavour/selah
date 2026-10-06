@@ -19,6 +19,7 @@ On Vercel, `vercel.json` rewrites room links to the Vite app entry point so shar
 - GET  `/rooms/:code/state/`            -> snapshot
 - POST `/rooms/:code/hand/` | `/hand/lower/`            -> snapshot
 - POST `/rooms/:code/floor/grant/` | `/reject/` | `/release/`  {identity} -> snapshot
+- POST `/rooms/:code/screen-share/start/` | `/stop/` reserves/releases the room's single screen share for a floor speaker
 
 REST calls send `Authorization: Bearer <session>`. The server also broadcasts the
 full snapshot on LiveKit data topic `selah.state` after every change.

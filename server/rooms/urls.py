@@ -16,5 +16,7 @@ urlpatterns = [
     path("rooms/<str:code>/floor/release/", views.Release.as_view()),
     path("rooms/<str:code>/floor/remove/", views.Remove.as_view()),
     path("rooms/<str:code>/settings/", views.RoomSettings.as_view()),
+    path("rooms/<str:code>/screen-share/start/", views.StartScreenShare.as_view()),
+    path("rooms/<str:code>/screen-share/stop/", views.StopScreenShare.as_view()),
     path("livekit/webhook/", views.LiveKitWebhook.as_view()),
 ]

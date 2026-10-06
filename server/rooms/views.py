@@ -168,6 +168,18 @@ class RoomSettings(FloorView):
         return Response(services.update_settings(code, request.user.identity, v.get("mode"), v.get("speaker_limit")))
 
 
+class StartScreenShare(FloorView):
+    @handled
+    def post(self, request, code):
+        return Response(services.start_screen_share(code, request.user.identity))
+
+
+class StopScreenShare(FloorView):
+    @handled
+    def post(self, request, code):
+        return Response(services.stop_screen_share(code, request.user.identity))
+
+
 class LiveKitWebhook(APIView):
     """LiveKit calls this when people connect or drop. The body is signed, so verify it."""
 

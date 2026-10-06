@@ -12,6 +12,7 @@ class Room(models.Model):
     mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.APPROVAL)
     speaker_limit = models.PositiveSmallIntegerField(default=10)
     host_key_hash = models.CharField(max_length=64)  # the host key itself is never stored
+    screen_share_identity = models.CharField(max_length=32, blank=True, default="")
     version = models.PositiveIntegerField(default=0)  # bumped on every state change
     ended = models.BooleanField(default=False)
     opened_at = models.DateTimeField(null=True, blank=True)

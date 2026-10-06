@@ -14,7 +14,7 @@ import { Track } from "livekit-client";
 import Selah from "./assets/selah.webp";
 import ThemeToggle from "./component/themeToggle";
 import { toast } from "sonner";
-import { api } from "./api";
+import { ApiError, api } from "./api";
 import { Avatar } from "./avatar";
 import { avatarBg, avatarFromIdentity } from "./avatarData";
 
@@ -52,6 +52,12 @@ const ICONS = {
       <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.248-3.062A.5.5 0 0 1 22 7.87v8.196" />
       <path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2" />
       <path d="m2 2 20 20" />
+    </>
+  ),
+  screenShare: (
+    <>
+      <rect x="3" y="4" width="18" height="13" rx="2" />
+      <path d="M8 21h8m-4-4v4m-3-9 3-3 3 3m-3-3v6" />
     </>
   ),
   hand: (
@@ -343,6 +349,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [screenShareBusy, setScreenShareBusy] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [reactions, setReactions] = useState([]);
   const [pinnedId, setPinnedId] = useState(null); // local only: whose tile this viewer wants in the main view
@@ -357,10 +364,12 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   );
   const previousHostConnected = useRef(join.snapshot.host.connected);
   const reactionTimers = useRef(new Set());
-  const { localParticipant } = useLocalParticipant();
+  const screenShareReserved = useRef(false);
+  const { localParticipant, isScreenShareEnabled } = useLocalParticipant();
   const tracks = useTracks([
     { source: Track.Source.Camera, withPlaceholder: true },
     { source: Track.Source.Microphone, withPlaceholder: true },
+    { source: Track.Source.ScreenShare, withPlaceholder: false },
   ]);
   const participants = useParticipants();
 
@@ -386,6 +395,15 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     reactionTimers.current.forEach((timer) => window.clearTimeout(timer));
     reactionTimers.current.clear();
   }, []);
+
+  useEffect(() => {
+    if (isScreenShareEnabled || !screenShareReserved.current) return;
+    screenShareReserved.current = false;
+    api.stopScreenShare(code, join.session).catch((e) => {
+      screenShareReserved.current = true;
+      setError(e instanceof Error ? e.message : "Could not stop screen sharing. Please try again.");
+    });
+  }, [code, isScreenShareEnabled, join.session]);
 
   const handleReactionMessage = useCallback((msg) => {
     try {
@@ -549,6 +567,64 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     }
   }
 
+  async function toggleScreenShare() {
+    if (screenShareBusy) return;
+    setScreenShareBusy(true);
+    setError("");
+    try {
+      if (isScreenShareEnabled) {
+        screenShareReserved.current = false;
+        await localParticipant.setScreenShareEnabled(false);
+        await api.stopScreenShare(code, join.session);
+        return;
+      }
+
+      await api.startScreenShare(code, join.session);
+      screenShareReserved.current = true;
+      try {
+        await localParticipant.setScreenShareEnabled(true);
+      } catch (e) {
+        screenShareReserved.current = false;
+        try {
+          await api.stopScreenShare(code, join.session);
+        } catch (releaseError) {
+          throw new Error(
+            "Screen sharing could not start, and its reservation could not be cleared. Please leave and rejoin the meeting.",
+            { cause: releaseError },
+          );
+        }
+        const name = e instanceof Error ? e.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          throw new Error(
+            "Screen sharing was cancelled or blocked. Choose a screen or window and try again.",
+            { cause: e },
+          );
+        }
+        throw new Error("Could not start screen sharing. Check your browser permissions and try again.", { cause: e });
+      }
+    } catch (e) {
+      const name = e instanceof Error ? e.name : "";
+      const message = e instanceof ApiError
+        ? e.message
+        : name === "NotAllowedError" || name === "PermissionDeniedError"
+          ? "Screen sharing was cancelled or blocked. Choose a screen or window and try again."
+          : name === "NotFoundError"
+            ? "No screen is available to share."
+            : name === "NotReadableError" || name === "AbortError"
+              ? "Your screen could not be shared. Close any other app using screen capture and try again."
+              : name === "SecurityError"
+                ? "Screen sharing requires a secure connection. Open the meeting over HTTPS and try again."
+                : e instanceof Error && e.message.startsWith("Screen sharing could not start")
+                  ? e.message
+                  : isScreenShareEnabled
+                    ? "Could not stop screen sharing. Please try again."
+                    : "Could not start screen sharing. Check your browser permissions and try again.";
+      setError(message);
+    } finally {
+      setScreenShareBusy(false);
+    }
+  }
+
   const me = join.identity;
   const isHost = snap.host.identity === me;
   const isSpeaker = snap.speakers.some((p) => p.identity === me);
@@ -559,6 +635,19 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const canJoinNow = !floorFull && (!queueHead || queueHead === me);
   const micOn = localParticipant.isMicrophoneEnabled;
   const cameraOn = localParticipant.isCameraEnabled;
+  const screenShareTrack = tracks.find(
+    (track) =>
+      track.source === Track.Source.ScreenShare &&
+      isTrackReference(track) &&
+      !track.publication.isMuted,
+  );
+  const anotherScreenIsShared = tracks.some(
+    (track) =>
+      track.source === Track.Source.ScreenShare &&
+      track.participant.identity !== me &&
+      isTrackReference(track) &&
+      !track.publication.isMuted,
+  );
   const onStage = [snap.host, ...snap.speakers].filter((person) => person.connected);
   const activeParticipants = snap.participants.filter((person) => person.connected);
   const activeQueue = snap.queue.filter((person) =>
@@ -664,7 +753,19 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
 
         {/* Stage: main view with other speakers stacked over its right edge */}
         <section aria-label="On the floor" className="relative min-h-[320px] flex-1 overflow-hidden rounded-2xl bg-slate-100 md:min-h-0">
-          {mainPerson ? (
+          {screenShareTrack ? (
+            <>
+              <div className="absolute inset-0 bg-slate-950">
+                <VideoTrack
+                  trackRef={screenShareTrack}
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div className="absolute left-4 top-4 rounded-lg bg-black/55 px-3 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
+                {screenShareTrack.participant.name || "Someone"} is sharing their screen
+              </div>
+            </>
+          ) : mainPerson ? (
             <>
               <div className="absolute inset-0">
                 <PersonTile key={mainPerson.identity} person={mainPerson} variant="main" {...tileProps} />
@@ -710,9 +811,27 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         </section>
 
         {error && (
-          <p role="alert" className="text-center text-[13px] font-medium text-red-500">
-            {error}
-          </p>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left text-[13px] text-red-800 shadow-sm"
+          >
+            <span
+              aria-hidden="true"
+              className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-100 font-bold text-red-700"
+            >
+              !
+            </span>
+            <p className="min-w-0 flex-1 font-medium leading-relaxed">{error}</p>
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              onClick={() => setError("")}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-red-700 transition hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-600"
+            >
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          </div>
         )}
 
         {/* Controls */}
@@ -779,6 +898,22 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                   <Icon name={cameraOn ? "video" : "videoOff"} />
                 </Control>
               </>
+            )}
+            {(isSpeaker || isHost) && (
+              <Control
+                label={
+                  anotherScreenIsShared
+                    ? "A speaker is already sharing their screen"
+                    : isScreenShareEnabled
+                      ? "Stop sharing screen"
+                      : "Share screen"
+                }
+                tone={isScreenShareEnabled ? "green" : "dark"}
+                onClick={toggleScreenShare}
+                disabled={screenShareBusy || (anotherScreenIsShared && !isScreenShareEnabled)}
+              >
+                <Icon name="screenShare" />
+              </Control>
             )}
 
             {isSpeaker && (

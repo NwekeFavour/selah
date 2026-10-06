@@ -148,6 +148,57 @@ class RoomTests(TestCase):
         self.assertFalse(self.lk.last_perm()[a["identity"]])
         self.assertEqual(self.act(host, "floor/grant/", {"identity": c["identity"]}).status_code, 200)
 
+    def test_only_host_or_speakers_can_reserve_screen_share(self):
+        code, host, (speaker, listener) = self.setup_room(guests=2)
+        self.act(host, "floor/grant/", {"identity": speaker["identity"]})
+
+        denied = self.act(listener, "screen-share/start/")
+        host_share = self.act(host, "screen-share/start/")
+        speaker_blocked = self.act(speaker, "screen-share/start/")
+
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(
+            denied.json()["detail"],
+            "Only the host or a speaker on the floor can share their screen.",
+        )
+        self.assertEqual(host_share.status_code, 200)
+        self.assertEqual(host_share.json(), {"identity": host["identity"], "name": "Host"})
+        self.assertEqual(speaker_blocked.status_code, 409)
+        self.assertIn("Host is already sharing", speaker_blocked.json()["detail"])
+        self.assertEqual(self.act(host, "screen-share/stop/").status_code, 200)
+        allowed = self.act(speaker, "screen-share/start/")
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.json(), {"identity": speaker["identity"], "name": "G0"})
+
+    def test_only_one_speaker_can_reserve_screen_share_at_a_time(self):
+        code, host, (first, second) = self.setup_room(guests=2)
+        self.act(host, "floor/grant/", {"identity": first["identity"]})
+        self.act(host, "floor/grant/", {"identity": second["identity"]})
+
+        self.assertEqual(self.act(first, "screen-share/start/").status_code, 200)
+        conflict = self.act(second, "screen-share/start/")
+
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(
+            conflict.json()["detail"],
+            "G0 is already sharing their screen. Please wait until they finish.",
+        )
+        self.assertEqual(self.act(first, "screen-share/stop/").status_code, 200)
+        self.assertEqual(self.act(second, "screen-share/start/").status_code, 200)
+
+    def test_screen_share_reservation_clears_when_speaker_leaves_floor_or_disconnects(self):
+        code, host, (speaker, other) = self.setup_room(guests=2)
+        self.act(host, "floor/grant/", {"identity": speaker["identity"]})
+        self.act(host, "floor/grant/", {"identity": other["identity"]})
+
+        self.act(speaker, "screen-share/start/")
+        self.act(host, "floor/release/", {"identity": speaker["identity"]})
+        self.assertEqual(self.act(other, "screen-share/start/").status_code, 200)
+
+        services.mark_disconnected(code, other["identity"], "screen-share-session", 100)
+        self.assertEqual(Room.objects.get(code=code).screen_share_identity, "")
+
     def test_cannot_exceed_global_max(self):
         code, host, _ = self.setup_room(guests=0)
         r = self.act(host, "settings/", {"speaker_limit": 99})

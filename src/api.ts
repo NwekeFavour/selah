@@ -67,4 +67,8 @@ export const api = {
     call<Snapshot>(`/rooms/${code}/floor/remove/`, { identity }, s),
   updateSettings: (code: string, s: string, settings: { mode?: Mode; speaker_limit?: number }) =>
     call<Snapshot>(`/rooms/${code}/settings/`, settings, s),
+  startScreenShare: (code: string, s: string) =>
+    call<{ identity: string; name: string }>(`/rooms/${code}/screen-share/start/`, {}, s),
+  stopScreenShare: (code: string, s: string) =>
+    call<{ stopped: boolean }>(`/rooms/${code}/screen-share/stop/`, {}, s),
 };

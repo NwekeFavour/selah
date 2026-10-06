@@ -167,6 +167,7 @@ def _demote(p, fx):
     p.role_since = timezone.now()
     p.save(update_fields=["role", "queued_at", "role_since"])
     fx.permissions[p.identity] = False
+    Room.objects.filter(pk=p.room_id, screen_share_identity=p.identity).update(screen_share_identity="")
 
 
 def _fill_open(room, fx):
@@ -247,6 +248,9 @@ def join(code, display_name, guest_id, host_key=None, avatar=""):
                 previous.is_host = False
                 previous.save(update_fields=["is_host"])
                 fx.permissions[previous.identity] = False
+                if room.screen_share_identity == previous.identity:
+                    room.screen_share_identity = ""
+                    room.save(update_fields=["screen_share_identity"])
             p.is_host = True
             p.role = LISTENER
             p.queued_at = None
@@ -378,6 +382,7 @@ def remove(code, actor_identity, target_identity):
         target.role = LISTENER
         target.queued_at = None
         target.save(update_fields=["banned", "role", "queued_at"])
+        Room.objects.filter(pk=room.pk, screen_share_identity=target.identity).update(screen_share_identity="")
         fx.remove.append(target.identity)
         _fill_open(room, fx)
         snap = _bump(room)
@@ -397,6 +402,41 @@ def update_settings(code, actor_identity, mode=None, speaker_limit=None):
         _fill_open(room, fx)
         snap = _bump(room)
     return _flush(room, snap, fx)
+
+
+def start_screen_share(code, identity):
+    with transaction.atomic():
+        room = _lock(code)
+        participant = _participant(room, identity)
+        if not participant.is_host and participant.role != SPEAKER:
+            raise RoomError("Only the host or a speaker on the floor can share their screen.", 403)
+        if not participant.connected:
+            raise RoomError("Reconnect to the meeting before sharing your screen.", 409)
+        if room.screen_share_identity and room.screen_share_identity != identity:
+            current = room.participants.filter(
+                identity=room.screen_share_identity,
+                connected=True,
+                banned=False,
+            ).first()
+            if current and (current.is_host or current.role == SPEAKER):
+                raise RoomError(
+                    f"{current.name} is already sharing their screen. Please wait until they finish.",
+                    409,
+                )
+            room.screen_share_identity = ""
+        room.screen_share_identity = identity
+        room.save(update_fields=["screen_share_identity"])
+        return {"identity": participant.identity, "name": participant.name}
+
+
+def stop_screen_share(code, identity):
+    with transaction.atomic():
+        room = _lock(code)
+        _participant(room, identity)
+        if room.screen_share_identity == identity:
+            room.screen_share_identity = ""
+            room.save(update_fields=["screen_share_identity"])
+    return {"stopped": True}
 
 
 # ---- Connection tracking (LiveKit webhooks) and the grace period -------------
@@ -425,6 +465,9 @@ def _track(code, identity, sid, joined_at, connected):
         p.connected = connected
         p.disconnected_at = None if connected else timezone.now()
         p.save(update_fields=["livekit_sid", "session_joined_at", "connected", "disconnected_at"])
+        if not connected and room.screen_share_identity == identity:
+            room.screen_share_identity = ""
+            room.save(update_fields=["screen_share_identity"])
         if connected and p.is_host and room.opened_at is None:
             _open_room(room)
         snap = _bump(room)
@@ -450,6 +493,9 @@ def leave_room(code, identity):
         participant.connected = False
         participant.disconnected_at = timezone.now()
         participant.save(update_fields=["connected", "disconnected_at"])
+        if room.screen_share_identity == identity:
+            room.screen_share_identity = ""
+            room.save(update_fields=["screen_share_identity"])
         snap = _bump(room)
     return _flush(room, snap, fx)
 
@@ -461,7 +507,8 @@ def end_room(code, identity):
         actor = _participant(room, identity)
         _require_host(actor)
         room.ended = True
-        room.save(update_fields=["ended"])
+        room.screen_share_identity = ""
+        room.save(update_fields=["ended", "screen_share_identity"])
         now = timezone.now()
         room.participants.filter(connected=True, banned=False).update(
             connected=False,
