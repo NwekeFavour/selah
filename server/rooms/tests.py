@@ -56,16 +56,18 @@ class RoomTests(TestCase):
         self.assertEqual(r.status_code, 201)
         return r.json()
 
-    def join(self, code, name="Guest", guest=None, host_key=None):
+    def join(self, code, name="Guest", guest=None, host_key=None, avatar=None):
         self.n += 1
         body = {"display_name": name, "guest_id": guest or f"guest-id-{self.n:04d}-xxxx"}
         if host_key:
             body["host_key"] = host_key
+        if avatar is not None:
+            body["avatar"] = avatar
         r = self.api.post(f"/api/rooms/{code}/join/", body, format="json")
         return r
 
-    def person(self, code, name="Guest", host_key=None, guest=None):
-        r = self.join(code, name, guest, host_key)
+    def person(self, code, name="Guest", host_key=None, guest=None, avatar=None):
+        r = self.join(code, name, guest, host_key, avatar)
         self.assertEqual(r.status_code, 200, r.content)
         d = r.json()
         d["code"] = code
@@ -92,6 +94,7 @@ class RoomTests(TestCase):
         self.assertEqual(g["snapshot"]["participants"], [{
             "identity": g["identity"],
             "name": "G0",
+            "avatar": "",
             "role": "listener",
             "queued": False,
             "connected": True,
@@ -205,6 +208,21 @@ class RoomTests(TestCase):
         self.assertEqual(a2["identity"], a["identity"])
         self.assertEqual([p["identity"] for p in a2["snapshot"]["queue"]], [a["identity"]])
 
+    def test_avatar_is_saved_once_per_participant_and_shared_in_snapshot(self):
+        room = self.create()
+        host = self.person(room["code"], "Host", host_key=room["host_key"], avatar="1234502")
+        self.assertEqual(host["snapshot"]["host"]["avatar"], "1234502")
+        guest_id = "avatar-test-guest"
+        guest = self.person(room["code"], "Ada", guest=guest_id, avatar="7654321")
+        self.assertEqual(guest["snapshot"]["participants"][0]["avatar"], "7654321")
+        again = self.join(room["code"], "Ada", guest=guest_id, avatar="1234502").json()
+        self.assertEqual(again["snapshot"]["participants"][0]["avatar"], "7654321")
+
+    def test_avatar_validation_rejects_out_of_palette_codes(self):
+        room = self.create()
+        response = self.join(room["code"], "Host", host_key=room["host_key"], avatar="9999999")
+        self.assertEqual(response.status_code, 400)
+
     def test_grace_period_releases_places(self):
         code, host, (a, b) = self.setup_room("approval", guests=2)
         self.act(host, "settings/", {"speaker_limit": 1})
@@ -262,11 +280,83 @@ class RoomTests(TestCase):
             False,
         )
 
+    def test_host_disconnect_broadcasts_unavailable_status(self):
+        code, host, _ = self.setup_room(guests=0)
+        self.lk.calls.clear()
+
+        services.mark_disconnected(code, host["identity"], f"sid-{host['identity']}", 1)
+
+        self.assertFalse(Participant.objects.get(identity=host["identity"]).connected)
+        latest = self.lk.calls[-1]["snap"]
+        self.assertFalse(latest["host"]["connected"])
+
+    def test_intentional_leave_marks_participant_disconnected_and_broadcasts(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        self.lk.calls.clear()
+
+        response = self.act(guest, "leave/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Participant.objects.get(identity=guest["identity"]).connected)
+        self.assertFalse(response.json()["participants"][0]["connected"])
+        self.assertFalse(self.lk.calls[-1]["snap"]["participants"][0]["connected"])
+
+    def test_intentional_leave_requires_a_valid_room_session(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+
+        response = APIClient().post(f"/api/rooms/{code}/leave/", {}, format="json")
+
+        self.assertIn(response.status_code, (401, 403))
+        self.assertTrue(Participant.objects.get(identity=guest["identity"]).connected)
+
+    def test_host_can_end_meeting_for_everyone(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        self.lk.calls.clear()
+
+        response = self.act(host, "end/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ended"])
+        self.assertTrue(Room.objects.get(code=code).ended)
+        self.assertFalse(Participant.objects.get(identity=host["identity"]).connected)
+        self.assertFalse(Participant.objects.get(identity=guest["identity"]).connected)
+        self.assertEqual(self.lk.deleted, [code])
+        self.assertTrue(self.lk.calls[-1]["snap"]["ended"])
+        self.assertEqual(self.join(code).status_code, 410)
+
+    def test_only_host_can_end_meeting(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+
+        response = self.act(guest, "end/")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Room.objects.get(code=code).ended)
+        self.assertEqual(self.lk.deleted, [])
+
     def test_meeting_ends_at_time_limit(self):
         code, host, _ = self.setup_room(guests=0)
         services.sweep_once(timezone.now() + timedelta(minutes=settings.SELAH["MEETING_MINUTES"] + 1))
         self.assertEqual(self.lk.deleted, [code])
         self.assertEqual(self.join(code).status_code, 410)
+
+    def test_unopened_meeting_expires_only_after_host_opens_it(self):
+        room = self.create()
+        services.sweep_once(timezone.now() + timedelta(days=2))
+        self.assertEqual(self.lk.deleted, [])
+        unopened = Room.objects.get(code=room["code"])
+        self.assertFalse(unopened.ended)
+        self.assertIsNone(unopened.opened_at)
+        self.assertEqual(self.join(room["code"]).status_code, 425)
+
+        host = self.person(room["code"], "Host", host_key=room["host_key"])
+        opened = Room.objects.get(code=room["code"])
+        self.assertEqual(
+            opened.ends_at,
+            opened.opened_at + timedelta(minutes=settings.SELAH["MEETING_MINUTES"]),
+        )
+        self.assertEqual(host["snapshot"]["ends_at"], opened.ends_at.isoformat())
+        services.sweep_once(opened.ends_at + timedelta(seconds=1))
+        self.assertEqual(self.lk.deleted, [room["code"]])
 
     def test_room_capacity(self):
         with override_settings(SELAH={**settings.SELAH, "MAX_PARTICIPANTS": 2}):
@@ -317,6 +407,33 @@ class RoomTests(TestCase):
         v2 = self.act(a, "hand/lower/").json()["version"]
         self.assertGreater(v2, v1)
         self.assertEqual(self.act(a, "state/", method="get").json()["version"], v2)
+
+    def test_public_room_status_reports_active_and_ended(self):
+        room = self.create()
+        path = f"/api/rooms/{room['code']}/status/"
+
+        active = self.api.get(path)
+        self.assertEqual(active.status_code, 200)
+        self.assertEqual(active.json(), {"ended": False})
+
+        host = self.person(room["code"], "Host", host_key=room["host_key"])
+        self.act(host, "end/")
+
+        ended = self.api.get(path)
+        self.assertEqual(ended.status_code, 200)
+        self.assertEqual(ended.json(), {"ended": True})
+
+    def test_public_room_status_reports_elapsed_meeting_as_ended(self):
+        room = self.create()
+        meeting = Room.objects.get(code=room["code"])
+        meeting.opened_at = timezone.now() - timedelta(minutes=2)
+        meeting.ends_at = timezone.now() - timedelta(minutes=1)
+        meeting.save(update_fields=["opened_at", "ends_at"])
+
+        response = self.api.get(f"/api/rooms/{room['code']}/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ended": True})
 
     def test_webhook_rejects_unsigned_calls(self):
         r = self.api.post("/api/livekit/webhook/", "{}", content_type="application/json")

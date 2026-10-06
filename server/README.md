@@ -11,9 +11,22 @@ waiting, the speaker cap) and tells LiveKit who may publish audio and video.
     python manage.py migrate
     python manage.py runserver  # http://localhost:8000
     python manage.py sweep      # second terminal: releases spots after the grace period, ends meetings
-    python manage.py test       # 19 tests, no LiveKit server needed
+    python manage.py test       # 27 tests, no LiveKit server needed
 
 Point the frontend at it with `VITE_API_URL=http://localhost:8000/api`.
+
+For Supabase, prefer its transaction-mode pooler for application traffic if the
+session-mode pooler is reaching its connection limit. Django closes database
+connections after each request so this app does not hold pool slots idle.
+
+When a meeting is created, copy its invite link and use **Enter as host** to open it now.
+If you close the creation dialog, the meeting stays saved under **Your meetings on this browser**;
+reopen it there later. An unopened link remains valid until the host joins, and the 60-minute meeting
+limit starts when the host opens it. Host access is stored in that browser, so opening the invite link
+on another device joins as a guest unless the host credential is available there.
+
+On their first join to each meeting, the host and each participant choose a generated avatar.
+That choice is locked for that participant for the meeting and is shared in the server's room state.
 
 ## LiveKit setup
 
@@ -28,7 +41,10 @@ Point the frontend at it with `VITE_API_URL=http://localhost:8000/api`.
 |---|---|---|
 | POST `/api/rooms/` | anyone | `{title?, mode?}` -> `{code, host_key}` |
 | POST `/api/rooms/:code/join/` | anyone | `{display_name, guest_id, host_key?}` -> `{token, livekit_url, session, identity, snapshot}` |
+| GET `/api/rooms/:code/status/` | anyone | `{ended}` (also treats elapsed meetings as ended) |
 | GET `/api/rooms/:code/state/` | member | current snapshot |
+| POST `/api/rooms/:code/leave/` | member | mark this participant disconnected and broadcast the updated snapshot |
+| POST `/api/rooms/:code/end/` | host | end the meeting for everyone and disconnect all participants |
 | POST `/api/rooms/:code/hand/` | member | request the floor (speak now in an open room with a free spot, otherwise join the queue) |
 | POST `/api/rooms/:code/hand/lower/` | member | leave the queue |
 | POST `/api/rooms/:code/floor/grant/` | host | `{identity}` give someone the floor (409 if full) |
@@ -45,7 +61,7 @@ Members send `Authorization: Bearer <session>`. Errors look like `{"detail": "..
 - Listeners get tokens with `can_publish=false`. Only the server flips that flag, so nobody can speak
   without being granted a spot.
 - Every change runs in one transaction with the room row locked, so two people cannot take the last spot.
-- After each change the server bumps `version` and broadcasts the full snapshot on the data topic `qara.state`.
+- After each change the server bumps `version` and broadcasts the full snapshot on the data topic `selah.state`.
   The frontend ignores older versions. (Rename the topic in `rooms/livekit.py` and `Room.jsx` together.)
 - The identity everyone sees is a random public id. The browser's private guest id is only stored as a hash,
   so knowing someone's identity does not let you take over their place.

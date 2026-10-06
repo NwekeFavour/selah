@@ -60,7 +60,12 @@ def read_session(token):
 # ---- Snapshot ---------------------------------------------------------------
 
 def _person(p):
-    return {"identity": p.identity, "name": p.name}
+    return {
+        "identity": p.identity,
+        "name": p.name,
+        "avatar": p.avatar,
+        "connected": p.connected,
+    }
 
 
 def snapshot(room):
@@ -71,8 +76,14 @@ def snapshot(room):
     queue = sorted((p for p in guests if p.role == LISTENER and p.queued_at), key=lambda p: p.queued_at)
     return {
         "version": room.version,
+        "ended": room.ended,
         "mode": room.mode,
-        "host": _person(host) if host else {"identity": "", "name": "Host"},
+        "host": _person(host) if host else {
+            "identity": "",
+            "name": "Host",
+            "avatar": "",
+            "connected": False,
+        },
         "speakers": [_person(p) for p in speakers],
         "queue": [_person(p) for p in queue],
         "participants": [
@@ -103,14 +114,27 @@ def _flush(room, snap, fx):
 
 # ---- Helpers ----------------------------------------------------------------
 
+def _room_ended(room, now=None):
+    now = now or timezone.now()
+    return room.ended or (room.opened_at is not None and room.ends_at <= now)
+
+
 def _lock(code):
     try:
         room = Room.objects.select_for_update().get(code=code.lower())
     except Room.DoesNotExist:
         raise RoomError("Meeting not found.", 404)
-    if room.ended or room.ends_at <= timezone.now():
+    if _room_ended(room):
         raise RoomError("This meeting has ended.", 410)
     return room
+
+
+def room_status(code):
+    try:
+        room = Room.objects.only("ended", "opened_at", "ends_at").get(code=code.lower())
+    except Room.DoesNotExist:
+        raise RoomError("Meeting not found.", 404)
+    return {"ended": _room_ended(room)}
 
 
 def _participant(room, identity, status=404):
@@ -181,7 +205,13 @@ def create_room(title, mode):
     return room, host_key
 
 
-def join(code, display_name, guest_id, host_key=None):
+def _open_room(room, opened_at=None):
+    room.opened_at = opened_at or timezone.now()
+    room.ends_at = room.opened_at + timedelta(minutes=cfg("MEETING_MINUTES"))
+    room.save(update_fields=["opened_at", "ends_at"])
+
+
+def join(code, display_name, guest_id, host_key=None, avatar=""):
     client = livekit.get_client()
     if not client.configured:
         raise RoomError("Video is not configured on the server yet.", 503)
@@ -192,8 +222,7 @@ def join(code, display_name, guest_id, host_key=None):
         if not claims_host and room.opened_at is None:
             raise RoomError("The host has not opened this call yet. Please wait.", 425)
         if claims_host and room.opened_at is None:
-            room.opened_at = timezone.now()
-            room.save(update_fields=["opened_at"])
+            _open_room(room)
         secret = _hash(guest_id)
         p = room.participants.filter(secret_hash=secret).first()
         if p and p.banned:
@@ -201,8 +230,16 @@ def join(code, display_name, guest_id, host_key=None):
         if not p:
             if room.participants.filter(connected=True, banned=False).count() >= cfg("MAX_PARTICIPANTS"):
                 raise RoomError("This meeting is full.", 403)
-            p = Participant(room=room, identity=secrets.token_hex(8), secret_hash=secret, name=display_name)
+            p = Participant(
+                room=room,
+                identity=secrets.token_hex(8),
+                secret_hash=secret,
+                name=display_name,
+                avatar=avatar,
+            )
         p.name = display_name
+        if not p.avatar and avatar:
+            p.avatar = avatar
         p.connected = True
         p.disconnected_at = None
         if claims_host and not p.is_host:
@@ -236,7 +273,7 @@ def join(code, display_name, guest_id, host_key=None):
 def get_state(participant):
     room = participant.room
     room.refresh_from_db()
-    if room.ended or room.ends_at <= timezone.now():
+    if room.ended or (room.opened_at is not None and room.ends_at <= timezone.now()):
         raise RoomError("This meeting has ended.", 410)
     return snapshot(room)
 
@@ -389,8 +426,7 @@ def _track(code, identity, sid, joined_at, connected):
         p.disconnected_at = None if connected else timezone.now()
         p.save(update_fields=["livekit_sid", "session_joined_at", "connected", "disconnected_at"])
         if connected and p.is_host and room.opened_at is None:
-            room.opened_at = timezone.now()
-            room.save(update_fields=["opened_at"])
+            _open_room(room)
         snap = _bump(room)
     _flush(room, snap, Effects())
 
@@ -401,6 +437,40 @@ def mark_connected(code, identity, sid="", joined_at=0):
 
 def mark_disconnected(code, identity, sid="", joined_at=0):
     _track(code, identity, sid, joined_at, False)
+
+
+def leave_room(code, identity):
+    """Mark an authenticated participant as disconnected after an intentional leave."""
+    fx = Effects()
+    with transaction.atomic():
+        room = _lock(code)
+        participant = _participant(room, identity)
+        if not participant.connected:
+            return snapshot(room)
+        participant.connected = False
+        participant.disconnected_at = timezone.now()
+        participant.save(update_fields=["connected", "disconnected_at"])
+        snap = _bump(room)
+    return _flush(room, snap, fx)
+
+
+def end_room(code, identity):
+    """End a room for everyone. Only the current host may do this."""
+    with transaction.atomic():
+        room = _lock(code)
+        actor = _participant(room, identity)
+        _require_host(actor)
+        room.ended = True
+        room.save(update_fields=["ended"])
+        now = timezone.now()
+        room.participants.filter(connected=True, banned=False).update(
+            connected=False,
+            disconnected_at=now,
+        )
+        snap = _bump(room)
+    _flush(room, snap, Effects())
+    livekit.get_client().delete_room(room.code)
+    return snap
 
 
 def _expire(room_id, now):
@@ -430,7 +500,7 @@ def sweep_once(now=None):
     and close meetings that reached their time limit."""
     now = now or timezone.now()
     done = 0
-    for room in Room.objects.filter(ended=False, ends_at__lte=now):
+    for room in Room.objects.filter(ended=False, opened_at__isnull=False, ends_at__lte=now):
         Room.objects.filter(pk=room.pk).update(ended=True)
         livekit.get_client().delete_room(room.code)
         done += 1

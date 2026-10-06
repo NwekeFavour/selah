@@ -31,6 +31,7 @@ class Participant(models.Model):
     identity = models.CharField(max_length=32)      # public id, shown to everyone, used in LiveKit
     secret_hash = models.CharField(max_length=64)   # hash of the browser's private guest id
     name = models.CharField(max_length=40)
+    avatar = models.CharField(max_length=7, blank=True, default="")
     is_host = models.BooleanField(default=False)
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.LISTENER)
     role_since = models.DateTimeField(default=timezone.now)

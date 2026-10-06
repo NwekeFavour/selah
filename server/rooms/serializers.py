@@ -20,11 +20,18 @@ class JoinSerializer(serializers.Serializer):
     display_name = serializers.CharField(max_length=40)
     guest_id = serializers.CharField(min_length=8, max_length=100)
     host_key = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)
+    avatar = serializers.RegexField(r"^\d{7}$", required=False, allow_blank=True)
 
     def validate_display_name(self, value):
         value = " ".join(_CONTROL.sub(" ", value).split())
         if not value:
             raise serializers.ValidationError("Please enter a name.")
+        return value
+
+    def validate_avatar(self, value):
+        limits = (8, 8, 8, 10, 8, 3, 3)
+        if value and any(int(digit) >= limit for digit, limit in zip(value, limits)):
+            raise serializers.ValidationError("Choose a valid avatar.")
         return value
 
 

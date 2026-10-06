@@ -8,7 +8,7 @@ const MODES = [
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled])";
 
-export default function StartModal({ open, onClose, onEnter }) {
+export default function StartModal({ open, onClose, onEnter, onMeetingCreated }) {
   const [shown, setShown] = useState(false);
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState("approval");
@@ -84,6 +84,8 @@ export default function StartModal({ open, onClose, onEnter }) {
     try {
       const room = await api.createRoom(title.trim(), mode);
       localStorage.setItem(`selah.host.${room.code}`, room.host_key);
+      localStorage.setItem(`selah.host.title.${room.code}`, title.trim());
+      onMeetingCreated?.(room.code);
       setCode(room.code);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the meeting. Please try again.");

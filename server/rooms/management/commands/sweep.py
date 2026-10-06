@@ -1,6 +1,7 @@
 import logging
 import time
 
+from django.db import connections
 from django.core.management.base import BaseCommand
 
 from rooms.services import sweep_once
@@ -21,6 +22,8 @@ class Command(BaseCommand):
                 sweep_once()
             except Exception:
                 log.exception("Sweep failed")
+            finally:
+                connections.close_all()
             if opts["once"]:
                 return
             time.sleep(opts["interval"])

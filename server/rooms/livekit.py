@@ -14,7 +14,7 @@ from livekit import api
 log = logging.getLogger(__name__)
 
 # The frontend listens for the room snapshot on this data topic.
-STATE_TOPIC = "qara.state"
+STATE_TOPIC = "selah.state"
 
 
 class LiveKit:

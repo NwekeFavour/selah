@@ -68,7 +68,13 @@ if DATABASE_URL.startswith(("http://", "https://")):
         "Leave it empty to use local SQLite."
     )
 if DATABASE_URL:
-    DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=60)}
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0,
+            conn_health_checks=True,
+        )
+    }
 else:
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
 
@@ -84,7 +90,7 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"create": "20/hour", "join": "60/min", "floor": "120/min"},
+    "DEFAULT_THROTTLE_RATES": {"create": "20/hour", "join": "60/min", "floor": "120/min", "status": "120/min"},
 }
 
 # LiveKit

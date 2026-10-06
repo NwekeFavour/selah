@@ -4,6 +4,8 @@ export type Mode = "approval" | "open";
 export interface Person {
   identity: string;
   name: string;
+  avatar: string;
+  connected: boolean;
 }
 
 export interface Participant extends Person {
@@ -15,6 +17,7 @@ export interface Participant extends Person {
 /** Full room state, owned by the server and broadcast on every change. */
 export interface Snapshot {
   version: number;
+  ended: boolean;
   mode: Mode;
   host: Person;
   speakers: Person[];

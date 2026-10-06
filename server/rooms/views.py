@@ -74,7 +74,25 @@ class JoinRoom(APIView):
         data = JoinSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         v = data.validated_data
-        return Response(services.join(code, v["display_name"], v["guest_id"], v.get("host_key") or None))
+        return Response(
+            services.join(
+                code,
+                v["display_name"],
+                v["guest_id"],
+                v.get("host_key") or None,
+                v.get("avatar", ""),
+            )
+        )
+
+
+class RoomStatus(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_scope = "status"
+
+    @handled
+    def get(self, request, code):
+        return Response(services.room_status(code))
 
 
 class FloorView(APIView):
@@ -89,6 +107,18 @@ class RoomState(FloorView):
     @handled
     def get(self, request, code):
         return Response(services.get_state(request.user))
+
+
+class LeaveRoom(FloorView):
+    @handled
+    def post(self, request, code):
+        return Response(services.leave_room(code, request.user.identity))
+
+
+class EndRoom(FloorView):
+    @handled
+    def post(self, request, code):
+        return Response(services.end_room(code, request.user.identity))
 
 
 class RaiseHand(FloorView):

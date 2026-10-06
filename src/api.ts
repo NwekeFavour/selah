@@ -45,9 +45,12 @@ async function call<T>(path: string, body?: unknown, session?: string): Promise<
 export const api = {
   createRoom: (title: string, mode: Mode = "approval") =>
     call<{ code: string; host_key: string }>("/rooms/", { title, mode }),
-  join: (code: string, display_name: string, guest_id: string, host_key?: string) =>
-    call<JoinResult>(`/rooms/${code}/join/`, { display_name, guest_id, host_key }),
+  join: (code: string, display_name: string, guest_id: string, host_key?: string, avatar?: string) =>
+    call<JoinResult>(`/rooms/${code}/join/`, { display_name, guest_id, host_key, avatar }),
+  meetingStatus: (code: string) => call<{ ended: boolean }>(`/rooms/${code}/status/`),
   state: (code: string, session: string) => call<Snapshot>(`/rooms/${code}/state/`, undefined, session),
+  leave: (code: string, session: string) => call<Snapshot>(`/rooms/${code}/leave/`, {}, session),
+  end: (code: string, session: string) => call<Snapshot>(`/rooms/${code}/end/`, {}, session),
 
   // Raise a hand. In an open room with a free spot this puts you on the floor straight away.
   raiseHand: (code: string, s: string) => call<Snapshot>(`/rooms/${code}/hand/`, {}, s),

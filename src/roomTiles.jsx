@@ -6,6 +6,8 @@ import {
   useTracks,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
+import { Avatar } from "./avatar";
+import { avatarBg, avatarFromIdentity } from "./avatarData";
 
 // The speakers on the floor. `people` comes from the server snapshot, so someone can be listed
 // before their browser has connected to LiveKit; they show as a name tile until they appear.
@@ -52,9 +54,12 @@ function TileFrame({ person, isHost, speaking = false, children }) {
       }`}
     >
       {children ?? (
-        <span className="text-4xl font-black text-white/70">
-          {person.name.slice(0, 1).toUpperCase()}
-        </span>
+        <div
+          className="h-28 w-28 overflow-hidden rounded-full"
+          style={{ background: avatarBg(person.avatar || avatarFromIdentity(person.identity)) }}
+        >
+          <Avatar code={person.avatar || avatarFromIdentity(person.identity)} className="h-full w-full" />
+        </div>
       )}
       <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-0.5 text-sm text-white">
         {person.name}

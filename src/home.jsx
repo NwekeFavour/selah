@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Selah from "./assets/selah.webp";
 import StartModal from "./component/startModal";
+import { ApiError, api } from "./api";
 // Marketing numbers live here so they are easy to change once media costs are known.
 const LIMITS = { people: 100, speakers: 10, minutes: 60 };
 
@@ -403,6 +404,28 @@ const MODES = {
 };
 
 const COMPANY = { name: "OKNOWN", url: "" };
+const HOST_KEY_PREFIX = "selah.host.";
+
+function removeSavedHostMeeting(code) {
+  localStorage.removeItem(`${HOST_KEY_PREFIX}${code}`);
+  localStorage.removeItem(`${HOST_KEY_PREFIX}title.${code}`);
+}
+
+function savedHostMeetings() {
+  const meetings = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith(HOST_KEY_PREFIX) || key.startsWith(`${HOST_KEY_PREFIX}title.`)) continue;
+    const code = key.slice(HOST_KEY_PREFIX.length);
+    if (!/^[a-z2-9]{3}(?:-[a-z2-9]{3}){2}$/.test(code)) continue;
+    meetings.push({
+      code,
+      title: localStorage.getItem(`${HOST_KEY_PREFIX}title.${code}`) || `Selah ${code}`,
+    });
+  }
+  return meetings.sort((a, b) => a.title.localeCompare(b.title));
+}
+
 const FOOTER_LINKS = [
   [
     "Product",
@@ -643,8 +666,44 @@ function Room({ mode }) {
 
 export default function Home({ onStart, onEnter }) {
   const [open, setOpen] = useState(false);
+  const [meetings, setMeetings] = useState(savedHostMeetings);
+  const [meetingStatuses, setMeetingStatuses] = useState({});
   const dark =
     "inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#2E9E8F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E9E8F] motion-reduce:transition-none";
+  const refreshMeetings = () => setMeetings(savedHostMeetings());
+
+  useEffect(() => {
+    if (!meetings.length) return undefined;
+    let active = true;
+    Promise.all(
+      meetings.map(async ({ code }) => {
+        try {
+          const { ended } = await api.meetingStatus(code);
+          if (ended) removeSavedHostMeeting(code);
+          return [code, ended ? "ended" : "active"];
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            removeSavedHostMeeting(code);
+            return [code, "ended"];
+          }
+          return [code, "unavailable"];
+        }
+      }),
+    ).then((results) => {
+      if (!active) return;
+      setMeetingStatuses((current) => ({
+        ...current,
+        ...Object.fromEntries(results),
+      }));
+      if (results.some(([, status]) => status === "ended")) {
+        setMeetings(savedHostMeetings());
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [meetings]);
 
   return (
     <div className="min-h-screen scroll-smooth bg-white text-slate-900 antialiased">
@@ -666,18 +725,133 @@ export default function Home({ onStart, onEnter }) {
             Plans
           </a>
         </nav>
-        <button
-          onClick={() => setOpen(true)}
-          className="px-4 py-2 text-sm text-slate-100 font-semibold transition bg-[#6495c4] hover:text-white"
-        >
-          Start a Selah
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOpen(true)}
+            className="px-4 py-2 text-sm text-slate-100 font-semibold transition bg-[#6495c4] hover:text-white"
+          >
+            Start a Selah
+          </button>
+        </div>
       </header>
+
+      {meetings.length > 0 && (
+        <section
+          aria-label="Your saved meetings"
+          className="mx-auto max-w-6xl px-6 pb-8"
+        >
+          <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm sm:p-7">
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6495c4]">
+                  Host dashboard
+                </p>
+                <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
+                   Your saved meetings
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Your active rooms and their invite links, all in one place.
+                </p>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                {meetings.length} {meetings.length === 1 ? "meeting" : "meetings"}
+              </span>
+            </div>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {meetings.map(({ code, title }) => {
+                const status = meetingStatuses[code] ?? "checking";
+                return (
+                  <li
+                    key={code}
+                    className="group rounded-2xl border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#6495c4]/40 hover:shadow-md motion-reduce:transition-none"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#6495c4]/10 text-[#6495c4]">
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          aria-hidden="true"
+                        >
+                          <rect x="3" y="5" width="18" height="14" rx="3" />
+                          <path d="M8 10h8M8 14h4" />
+                        </svg>
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
+                            {title}
+                          </p>
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                              status === "active"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : status === "unavailable"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                status === "active"
+                                  ? "bg-emerald-500"
+                                  : status === "unavailable"
+                                    ? "bg-amber-500"
+                                    : "bg-slate-400"
+                              }`}
+                            />
+                            {status === "active"
+                              ? "Active"
+                              : status === "unavailable"
+                                ? "Status unavailable"
+                                : "Checking"}
+                          </span>
+                        </div>
+                        <input
+                          readOnly
+                          aria-label={`Invite link for ${title}`}
+                          value={`${window.location.origin}/r/${code}`}
+                          onFocus={(event) => event.target.select()}
+                          className="mt-2 w-full truncate rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500 outline-none ring-[#6495c4]/30 transition focus:ring-2"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <span className="text-xs text-slate-400">
+                        Select the link to copy
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onEnter(code)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#6495c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
+                      >
+                        Enter Meeting
+                        <svg
+                          viewBox="0 0 16 16"
+                          className="h-3.5 w-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 8h9M8 4l4 4-4 4" />
+                        </svg>
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </section>
+      )}
 
       <main id="top">
         <section className="mx-auto grid max-w-6xl lg:items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[0.7fr_1fr] md:items-start md:grid-cols-2 lg:pt-16">
           <div>
-            <h1 className="text-[40px]! sm:text-[42px]! text-start font-bold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[60px]!">
+            <h1 className="text-[40px]! sm:text-[42px]! text-start font-bold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[65px]!">
               Big meetings, <span className="text-[#6495c4]">one voice</span> at
               a time
               <Sparkle className="ml-2 inline h-6 w-6 text-slate-900" />
@@ -916,7 +1090,12 @@ export default function Home({ onStart, onEnter }) {
           </span>
         </div>
       </footer>
-      <StartModal open={open} onClose={() => setOpen(false)} onEnter={onEnter} />
+      <StartModal
+        open={open}
+        onClose={() => setOpen(false)}
+        onEnter={onEnter}
+        onMeetingCreated={refreshMeetings}
+      />
     </div>
   );
 }
