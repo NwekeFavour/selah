@@ -288,7 +288,7 @@ function MicStatus({ person, isHostRow, tracks, participants }) {
 
 export default function Room({ code, join, onLeave, onDisconnected, onMeetingEnded }) {
   const [theme, setTheme] = useState(() => (
-    localStorage.getItem("selah.room.theme") === "light" ? "light" : "dark"
+    localStorage.getItem("selah.room.theme") === "dark" ? "dark" : "light"
   ));
 
   useEffect(() => {
