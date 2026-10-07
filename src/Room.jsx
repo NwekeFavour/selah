@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
+  StartAudio,
   VideoTrack,
   isTrackReference,
   useDataChannel,
@@ -128,17 +129,49 @@ const TONES = {
   red: "bg-[#FF3B30] text-white hover:bg-[#e8352b]",
 };
 
-function Control({ label, onClick, tone = "glass", disabled, children }) {
+function Control({
+  label,
+  onClick,
+  tone = "glass",
+  disabled,
+  busy = false,
+  children,
+}) {
   return (
     <button
       type="button"
-      aria-label={label}
+      aria-label={busy ? `${label}, in progress` : label}
       title={label}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || busy}
+      aria-busy={busy}
       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007AFF] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 ${TONES[tone]}`}
     >
-      {children}
+      {busy ? (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-[18px] w-[18px] animate-spin motion-reduce:animate-none"
+          fill="none"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            stroke="currentColor"
+            strokeOpacity="0.3"
+            strokeWidth="3"
+          />
+          <path
+            d="M21 12a9 9 0 0 0-9-9"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+      ) : (
+        children
+      )}
     </button>
   );
 }
@@ -162,9 +195,14 @@ function PersonAvatar({ p, className = "h-9 w-9" }) {
   return (
     <span
       className={`${className} shrink-0 overflow-hidden rounded-full`}
-      style={{ background: avatarBg(p.avatar || avatarFromIdentity(p.identity)) }}
+      style={{
+        background: avatarBg(p.avatar || avatarFromIdentity(p.identity)),
+      }}
     >
-      <Avatar code={p.avatar || avatarFromIdentity(p.identity)} className="h-full w-full" />
+      <Avatar
+        code={p.avatar || avatarFromIdentity(p.identity)}
+        className="h-full w-full"
+      />
     </span>
   );
 }
@@ -178,11 +216,20 @@ function TileFrame({ person, variant, isHost, isMe, muted, speaking, video }) {
       className={`relative h-full w-full overflow-hidden ${
         speaking ? "ring-2 ring-inset ring-[#1F8F78]" : ""
       } ${main ? "rounded-2xl" : "rounded-xl"}`}
-      style={{ background: avatarBg(person.avatar || avatarFromIdentity(person.identity)) }}
+      style={{
+        background: avatarBg(
+          person.avatar || avatarFromIdentity(person.identity),
+        ),
+      }}
     >
       {video ?? (
         <div className="flex h-full w-full items-center justify-center">
-          <PersonAvatar p={person} className={main ? "h-36 w-36 sm:h-48 sm:w-48" : "h-10 w-10 sm:h-14 sm:w-14"} />
+          <PersonAvatar
+            p={person}
+            className={
+              main ? "h-36 w-36 sm:h-48 sm:w-48" : "h-10 w-10 sm:h-14 sm:w-14"
+            }
+          />
         </div>
       )}
 
@@ -193,7 +240,9 @@ function TileFrame({ person, variant, isHost, isMe, muted, speaking, video }) {
               {name}
             </span>
             {isHost && (
-              <span className="rounded-lg bg-[#6495c4] px-2.5 py-1 text-[12px] font-semibold text-white">Host</span>
+              <span className="rounded-lg bg-[#6495c4] px-2.5 py-1 text-[12px] font-semibold text-white">
+                Host
+              </span>
             )}
           </div>
           {muted && (
@@ -230,21 +279,32 @@ function LiveTile({ participant, ...rest }) {
 
 function PersonTile({ person, variant, hostId, me, tracks, participants }) {
   const camRef = tracks.find(
-    (t) => t.source === Track.Source.Camera && t.participant.identity === person.identity,
+    (t) =>
+      t.source === Track.Source.Camera &&
+      t.participant.identity === person.identity,
   );
   const micRef = tracks.find(
-    (t) => t.source === Track.Source.Microphone && t.participant.identity === person.identity,
+    (t) =>
+      t.source === Track.Source.Microphone &&
+      t.participant.identity === person.identity,
   );
   const participant = participants.find((x) => x.identity === person.identity);
-  const hasVideo = camRef && isTrackReference(camRef) && !camRef.publication.isMuted;
-  const muted = !(micRef && isTrackReference(micRef) && !micRef.publication.isMuted);
+  const hasVideo =
+    camRef && isTrackReference(camRef) && !camRef.publication.isMuted;
+  const muted = !(
+    micRef &&
+    isTrackReference(micRef) &&
+    !micRef.publication.isMuted
+  );
   const props = {
     person,
     variant,
     isHost: person.identity === hostId,
     isMe: person.identity === me,
     muted,
-    video: hasVideo ? <VideoTrack trackRef={camRef} className="h-full w-full object-cover" /> : null,
+    video: hasVideo ? (
+      <VideoTrack trackRef={camRef} className="h-full w-full object-cover" />
+    ) : null,
   };
   return participant ? (
     <LiveTile participant={participant} {...props} />
@@ -281,25 +341,93 @@ function LiveMicStatus({ participant, ...rest }) {
 
 function MicStatus({ person, isHostRow, tracks, participants }) {
   const micRef = tracks.find(
-    (t) => t.source === Track.Source.Microphone && t.participant.identity === person.identity,
+    (t) =>
+      t.source === Track.Source.Microphone &&
+      t.participant.identity === person.identity,
   );
   const participant = participants.find((x) => x.identity === person.identity);
-  const muted = !(micRef && isTrackReference(micRef) && !micRef.publication.isMuted);
+  const muted = !(
+    micRef &&
+    isTrackReference(micRef) &&
+    !micRef.publication.isMuted
+  );
   return participant ? (
-    <LiveMicStatus participant={participant} muted={muted} isHostRow={isHostRow} />
+    <LiveMicStatus
+      participant={participant}
+      muted={muted}
+      isHostRow={isHostRow}
+    />
   ) : (
     <StatusText muted={muted} speaking={false} isHostRow={isHostRow} />
   );
 }
 
-export default function Room({ code, join, onLeave, onDisconnected, onMeetingEnded }) {
-  const [theme, setTheme] = useState(() => (
-    localStorage.getItem("selah.room.theme") === "dark" ? "dark" : "light"
-  ));
+export default function Room({
+  code,
+  join,
+  onLeave,
+  onDisconnected,
+  onMeetingEnded,
+}) {
+  const [theme, setTheme] = useState(() =>
+    localStorage.getItem("selah.room.theme") === "dark" ? "dark" : "light",
+  );
+  const [endingAt, setEndingAt] = useState(null);
+  const [endingNow, setEndingNow] = useState(0);
+  const endingAtRef = useRef(null);
+
+  const beginMeetingEnding = useCallback(() => {
+    if (endingAtRef.current !== null) return;
+    const deadline = Date.now() + 3000;
+    endingAtRef.current = deadline;
+    setEndingNow(Date.now());
+    setEndingAt(deadline);
+  }, []);
+
+  const handleLiveKitDisconnected = useCallback(async () => {
+    if (endingAtRef.current !== null) return;
+    try {
+      const { ended } = await api.meetingStatus(code);
+      if (ended) {
+        beginMeetingEnding();
+        return;
+      }
+    } catch {
+      onDisconnected();
+      return;
+    }
+    onDisconnected();
+  }, [beginMeetingEnding, code, onDisconnected]);
+
+  useEffect(() => {
+    const meetingTitle = join.snapshot.title.trim();
+    document.title = meetingTitle ? `${meetingTitle} | Selah` : "Selah";
+    return () => {
+      document.title = "Selah";
+    };
+  }, [join.snapshot.title]);
 
   useEffect(() => {
     localStorage.setItem("selah.room.theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (endingAt === null) return undefined;
+    const tick = window.setInterval(() => setEndingNow(Date.now()), 100);
+    const finish = window.setTimeout(
+      onMeetingEnded,
+      Math.max(0, endingAt - Date.now()),
+    );
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(finish);
+    };
+  }, [endingAt, onMeetingEnded]);
+
+  const endingSeconds =
+    endingAt === null
+      ? 0
+      : Math.max(1, Math.ceil((endingAt - endingNow) / 1000));
 
   return (
     <div className="room-theme min-h-screen bg-[#EEF1F5]" data-theme={theme}>
@@ -309,19 +437,55 @@ export default function Room({ code, join, onLeave, onDisconnected, onMeetingEnd
         connect
         audio={false}
         video={false}
-        onDisconnected={onDisconnected}
+        onDisconnected={handleLiveKitDisconnected}
         className="min-h-screen bg-[#EEF1F5] text-slate-900 antialiased md:h-screen"
       >
         <RoomAudioRenderer />
+        <StartAudio
+          label="Tap to resume call audio"
+          className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
+        />
         <Stage
           code={code}
           join={join}
           theme={theme}
-          onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+          onToggleTheme={() =>
+            setTheme((current) => (current === "dark" ? "light" : "dark"))
+          }
           onLeave={onLeave}
-          onMeetingEnded={onMeetingEnded}
+          onMeetingEnded={beginMeetingEnding}
         />
       </LiveKitRoom>
+      {endingAt !== null && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/40 p-5 backdrop-blur-md"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="meeting-ended-title"
+          aria-describedby="meeting-ended-description"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-white/40 bg-white/90 px-7 py-8 text-center shadow-2xl backdrop-blur-xl">
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-4xl font-bold tabular-nums text-red-600 ring-8 ring-red-100/70">
+              <span role="timer" aria-live="assertive">
+                {endingSeconds}
+              </span>
+            </div>
+            <h1
+              id="meeting-ended-title"
+              className="mt-6 text-xl font-bold tracking-tight text-slate-900"
+            >
+              This meeting has ended
+            </h1>
+            <p
+              id="meeting-ended-description"
+              className="mt-2 text-sm leading-relaxed text-slate-600"
+            >
+              You’re being disconnected from the call and will be taken back in
+              a moment.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -343,6 +507,188 @@ function PersonRow({ p, sub, subClass = "text-slate-400", me, left, right }) {
   );
 }
 
+function AnnouncementText({ text }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, index) =>
+    /^https?:\/\//i.test(part) ? (
+      <a
+        key={index}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2"
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
+function PinnedAnnouncement({ announcement, isHost, onRemove, onSave }) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(announcement.text);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const shouldCollapse = announcement.text.length > 180;
+  let preview = announcement.text.slice(0, 180);
+  if (shouldCollapse) {
+    const lastWhitespace = Math.max(
+      preview.lastIndexOf(" "),
+      preview.lastIndexOf("\n"),
+    );
+    if (lastWhitespace > 0) preview = preview.slice(0, lastWhitespace);
+    const partialUrl = [...announcement.text.matchAll(/https?:\/\/\S+/g)].find(
+      (match) =>
+        match.index < preview.length &&
+        match.index + match[0].length > preview.length,
+    );
+    if (partialUrl) preview = preview.slice(0, partialUrl.index).trimEnd();
+  }
+  const detailsId = `announcement-${announcement.id}`;
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-[#B9D7F1] bg-[#EEF7FF] px-4 py-3 text-[13px] text-slate-700">
+      <div className="min-w-0 flex-1">
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#37688F]">
+          Pinned announcement
+        </p>
+        {editing ? (
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              setError("");
+              try {
+                await onSave(announcement.id, text);
+                setEditing(false);
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : "Could not edit announcement.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <textarea
+              aria-label="Edit announcement"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              maxLength={500}
+              rows={3}
+              className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-[#6495c4]"
+            />
+            {error && (
+              <p role="alert" className="mt-1 text-[11px] text-red-700">
+                {error}
+              </p>
+            )}
+            <div className="mt-2 flex gap-2">
+              <button
+                type="submit"
+                disabled={busy || !text.trim()}
+                className="rounded-lg bg-[#6495c4] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(false);
+                  setText(announcement.text);
+                  setError("");
+                }}
+                className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <p id={detailsId} className="whitespace-pre-wrap break-words">
+              <strong>{announcement.author}: </strong>
+              <AnnouncementText text={expanded ? announcement.text : preview} />
+              {shouldCollapse && !expanded ? "…" : ""}
+            </p>
+            {shouldCollapse && (
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-controls={detailsId}
+                onClick={() => setExpanded((value) => !value)}
+                className="mt-1 font-semibold text-[#37688F] underline underline-offset-2"
+              >
+                {expanded ? "Read less" : "Read more"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+      {isHost && (
+        <div className="flex gap-1">
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => {
+                setText(announcement.text);
+                setEditing(true);
+              }}
+              className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-600"
+            >
+              Edit
+            </button>
+          )}
+          <SmallBtn
+            label="Remove announcement"
+            onClick={() => onRemove(announcement.id)}
+            className="bg-white text-slate-600"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </SmallBtn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MeetingCountdown({ endsAt }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!endsAt) return null;
+  const deadline = new Date(endsAt).getTime();
+  if (!Number.isFinite(deadline)) return null;
+
+  const remainingSeconds = Math.max(0, Math.ceil((deadline - now) / 1000));
+  const hours = String(Math.floor(remainingSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((remainingSeconds % 3600) / 60)).padStart(
+    2,
+    "0",
+  );
+  const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  const urgent = remainingSeconds <= 10 * 60;
+
+  return (
+    <span
+      role="timer"
+      aria-label={`Meeting time remaining: ${hours} hours, ${minutes} minutes, ${seconds} seconds`}
+      className={`whitespace-nowrap text-[12px] font-bold leading-tight ${urgent ? "animate-pulse text-red-600 motion-reduce:animate-none" : "text-slate-800"}`}
+    >
+      {hours}:{minutes}:{seconds}
+    </span>
+  );
+}
+
 function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const [snap, setSnap] = useState(join.snapshot);
   const version = useRef(join.snapshot.version);
@@ -354,6 +700,21 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const [reactions, setReactions] = useState([]);
   const [pinnedId, setPinnedId] = useState(null); // local only: whose tile this viewer wants in the main view
   const [tab, setTab] = useState("people");
+  const [questionInbox, setQuestionInbox] = useState([]);
+  const [myQuestions, setMyQuestions] = useState([]);
+  const [askOpen, setAskOpen] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [editingQuestionId, setEditingQuestionId] = useState(null);
+  const [anonymousQuestion, setAnonymousQuestion] = useState(false);
+  const [questionBusy, setQuestionBusy] = useState(false);
+  const [questionError, setQuestionError] = useState("");
+  const [questionSent, setQuestionSent] = useState(false);
+  const [questionUnread, setQuestionUnread] = useState(0);
+  const [announcementText, setAnnouncementText] = useState("");
+  const [announcementBusy, setAnnouncementBusy] = useState(false);
+  const seenQuestionIds = useRef(new Set());
+  const initialInboxLoaded = useRef(false);
+  const lastQuestionToastAt = useRef(0);
   const warnedMeeting = useRef(null);
   const [hostNotice, setHostNotice] = useState(() =>
     join.snapshot.host.identity &&
@@ -373,50 +734,72 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   ]);
   const participants = useParticipants();
 
-  const addReaction = useCallback((emoji, senderIdentity = join.identity) => {
-    const sender = [snap.host, ...snap.participants].find(
-      (person) => person.identity === senderIdentity,
-    );
-    const reaction = {
-      id: crypto.randomUUID(),
-      emoji,
-      senderName: sender?.name ?? "Someone",
-      left: 8 + Math.random() * 78,
-    };
-    setReactions((current) => [...current, reaction]);
-    const timer = window.setTimeout(() => {
-      setReactions((current) => current.filter(({ id }) => id !== reaction.id));
-      reactionTimers.current.delete(timer);
-    }, 3400);
-    reactionTimers.current.add(timer);
-  }, [join.identity, snap]);
+  const addReaction = useCallback(
+    (emoji, senderIdentity = join.identity) => {
+      const sender = [snap.host, ...snap.participants].find(
+        (person) => person.identity === senderIdentity,
+      );
+      const reaction = {
+        id: crypto.randomUUID(),
+        emoji,
+        senderName: sender?.name ?? "Someone",
+        left: 8 + Math.random() * 78,
+      };
+      setReactions((current) => [...current, reaction]);
+      const timer = window.setTimeout(() => {
+        setReactions((current) =>
+          current.filter(({ id }) => id !== reaction.id),
+        );
+        reactionTimers.current.delete(timer);
+      }, 3400);
+      reactionTimers.current.add(timer);
+    },
+    [join.identity, snap],
+  );
 
-  useEffect(() => () => {
-    reactionTimers.current.forEach((timer) => window.clearTimeout(timer));
-    reactionTimers.current.clear();
-  }, []);
+  useEffect(
+    () => () => {
+      reactionTimers.current.forEach((timer) => window.clearTimeout(timer));
+      reactionTimers.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (isScreenShareEnabled || !screenShareReserved.current) return;
     screenShareReserved.current = false;
     api.stopScreenShare(code, join.session).catch((e) => {
       screenShareReserved.current = true;
-      setError(e instanceof Error ? e.message : "Could not stop screen sharing. Please try again.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not stop screen sharing. Please try again.",
+      );
     });
   }, [code, isScreenShareEnabled, join.session]);
 
-  const handleReactionMessage = useCallback((msg) => {
-    try {
-      const data = JSON.parse(new TextDecoder().decode(msg.payload));
-      if (data && REACTIONS.includes(data.emoji) && msg.from?.identity !== join.identity) {
-        addReaction(data.emoji, msg.from?.identity);
+  const handleReactionMessage = useCallback(
+    (msg) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(msg.payload));
+        if (
+          data &&
+          REACTIONS.includes(data.emoji) &&
+          msg.from?.identity !== join.identity
+        ) {
+          addReaction(data.emoji, msg.from?.identity);
+        }
+      } catch {
+        /* ignore malformed reaction */
       }
-    } catch {
-      /* ignore malformed reaction */
-    }
-  }, [addReaction, join.identity]);
+    },
+    [addReaction, join.identity],
+  );
 
-  const { send: sendReaction } = useDataChannel("selah.reaction", handleReactionMessage);
+  const { send: sendReaction } = useDataChannel(
+    "selah.reaction",
+    handleReactionMessage,
+  );
 
   useEffect(() => {
     if (!snap.ends_at) return undefined;
@@ -427,45 +810,63 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     if (warnedMeeting.current === warningKey) return undefined;
 
     const warningAt = deadline - 10 * 60 * 1000;
-    const timer = window.setTimeout(() => {
-      if (warnedMeeting.current === warningKey) return;
-      warnedMeeting.current = warningKey;
-      const minutesRemaining = Math.max(1, Math.ceil((deadline - Date.now()) / 60000));
-      toast.info(
-        minutesRemaining <= 1
-          ? "This meeting ends in less than a minute"
-          : `This meeting ends in ${minutesRemaining} minutes`,
-        { description: "The meeting will automatically end when its time limit is reached." },
-      );
-    }, Math.max(0, warningAt - Date.now()));
+    const timer = window.setTimeout(
+      () => {
+        if (warnedMeeting.current === warningKey) return;
+        warnedMeeting.current = warningKey;
+        const minutesRemaining = Math.max(
+          1,
+          Math.ceil((deadline - Date.now()) / 60000),
+        );
+        toast.info(
+          minutesRemaining <= 1
+            ? "This meeting ends in less than a minute"
+            : `This meeting ends in ${minutesRemaining} minutes`,
+          {
+            description:
+              "The meeting will automatically end when its time limit is reached.",
+          },
+        );
+      },
+      Math.max(0, warningAt - Date.now()),
+    );
 
     return () => window.clearTimeout(timer);
   }, [code, snap.ends_at]);
 
   // The server broadcasts the full room state on every change; ignore stale ones.
-  const applySnapshot = useCallback((next) => {
-    if (next.version > version.current) {
-      if (next.ended) {
-        if (next.host.identity !== join.identity) {
-          toast.info("This Selah has ended", {
-            description: "The meeting is over. Thanks for joining us.",
-          });
+  const applySnapshot = useCallback(
+    (next) => {
+      if (next.version > version.current) {
+        if (next.ended) {
+          if (next.host.identity !== join.identity) {
+            toast.info("This Selah has ended", {
+              description: "The meeting is over. Thanks for joining us.",
+            });
+          }
+          onMeetingEnded();
+          return;
         }
-        onMeetingEnded();
-        return;
+        const wasHostConnected = previousHostConnected.current;
+        const hostConnected = next.host.connected;
+        if (
+          wasHostConnected &&
+          !hostConnected &&
+          next.host.identity !== join.identity
+        ) {
+          setHostNotice(
+            "The host is unavailable. The meeting will continue, and the host can rejoin.",
+          );
+        } else if (hostConnected) {
+          setHostNotice("");
+        }
+        previousHostConnected.current = hostConnected;
+        version.current = next.version;
+        setSnap(next);
       }
-      const wasHostConnected = previousHostConnected.current;
-      const hostConnected = next.host.connected;
-      if (wasHostConnected && !hostConnected && next.host.identity !== join.identity) {
-        setHostNotice("The host is unavailable. The meeting will continue, and the host can rejoin.");
-      } else if (hostConnected) {
-        setHostNotice("");
-      }
-      previousHostConnected.current = hostConnected;
-      version.current = next.version;
-      setSnap(next);
-    }
-  }, [join.identity, onMeetingEnded]);
+    },
+    [join.identity, onMeetingEnded],
+  );
 
   function fail(e) {
     if (e?.status === 410) return onMeetingEnded();
@@ -531,7 +932,11 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
       applySnapshot(next);
       onLeave();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not leave the meeting. Please try again.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not leave the meeting. Please try again.",
+      );
       setLeaving(false);
     }
   }
@@ -560,7 +965,10 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
       toast.success("Meeting ended");
       applySnapshot(next);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not end the meeting. Please try again.";
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Could not end the meeting. Please try again.";
       setError(message);
       toast.error(message);
       setEnding(false);
@@ -600,25 +1008,30 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             { cause: e },
           );
         }
-        throw new Error("Could not start screen sharing. Check your browser permissions and try again.", { cause: e });
+        throw new Error(
+          "Could not start screen sharing. Check your browser permissions and try again.",
+          { cause: e },
+        );
       }
     } catch (e) {
       const name = e instanceof Error ? e.name : "";
-      const message = e instanceof ApiError
-        ? e.message
-        : name === "NotAllowedError" || name === "PermissionDeniedError"
-          ? "Screen sharing was cancelled or blocked. Choose a screen or window and try again."
-          : name === "NotFoundError"
-            ? "No screen is available to share."
-            : name === "NotReadableError" || name === "AbortError"
-              ? "Your screen could not be shared. Close any other app using screen capture and try again."
-              : name === "SecurityError"
-                ? "Screen sharing requires a secure connection. Open the meeting over HTTPS and try again."
-                : e instanceof Error && e.message.startsWith("Screen sharing could not start")
-                  ? e.message
-                  : isScreenShareEnabled
-                    ? "Could not stop screen sharing. Please try again."
-                    : "Could not start screen sharing. Check your browser permissions and try again.";
+      const message =
+        e instanceof ApiError
+          ? e.message
+          : name === "NotAllowedError" || name === "PermissionDeniedError"
+            ? "Screen sharing was cancelled or blocked. Choose a screen or window and try again."
+            : name === "NotFoundError"
+              ? "No screen is available to share."
+              : name === "NotReadableError" || name === "AbortError"
+                ? "Your screen could not be shared. Close any other app using screen capture and try again."
+                : name === "SecurityError"
+                  ? "Screen sharing requires a secure connection. Open the meeting over HTTPS and try again."
+                  : e instanceof Error &&
+                      e.message.startsWith("Screen sharing could not start")
+                    ? e.message
+                    : isScreenShareEnabled
+                      ? "Could not stop screen sharing. Please try again."
+                      : "Could not start screen sharing. Check your browser permissions and try again.";
       setError(message);
     } finally {
       setScreenShareBusy(false);
@@ -627,6 +1040,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
 
   const me = join.identity;
   const isHost = snap.host.identity === me;
+  console.log(isHost);
   const isSpeaker = snap.speakers.some((p) => p.identity === me);
   const inQueue = snap.queue.some((p) => p.identity === me);
   const canSpeak = isHost || isSpeaker;
@@ -648,10 +1062,16 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
       isTrackReference(track) &&
       !track.publication.isMuted,
   );
-  const onStage = [snap.host, ...snap.speakers].filter((person) => person.connected);
-  const activeParticipants = snap.participants.filter((person) => person.connected);
+  const onStage = [snap.host, ...snap.speakers].filter(
+    (person) => person.connected,
+  );
+  const activeParticipants = snap.participants.filter(
+    (person) => person.connected,
+  );
   const activeQueue = snap.queue.filter((person) =>
-    activeParticipants.some((participant) => participant.identity === person.identity),
+    activeParticipants.some(
+      (participant) => participant.identity === person.identity,
+    ),
   );
 
   // Main view: whoever this viewer picked (if still on the floor), otherwise the host.
@@ -661,20 +1081,244 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const listeners = activeParticipants.filter((p) => !stageIds.has(p.identity));
   const peopleCount = onStage.length + listeners.length;
 
-  const toggle = (fn) => () => fn().catch((e) => setError(String(e.message ?? e)));
+  const toggle = (fn) => () =>
+    fn().catch((e) => setError(String(e.message ?? e)));
   const tileProps = { hostId: snap.host.identity, me, tracks, participants };
+
+  useEffect(() => {
+    if (!isHost) return undefined;
+    let active = true;
+    async function refreshInbox() {
+      try {
+        const questions = await api.questionInbox(code, join.session);
+        if (!active) return;
+        const newQuestions = questions.filter(
+          (question) =>
+            question.status === "pending" &&
+            !seenQuestionIds.current.has(question.id),
+        );
+        const firstLoad = !initialInboxLoaded.current;
+        initialInboxLoaded.current = true;
+        questions.forEach((question) =>
+          seenQuestionIds.current.add(question.id),
+        );
+        setQuestionInbox(questions);
+        if (tab === "questions") {
+          setQuestionUnread(0);
+        } else if (!firstLoad && newQuestions.length) {
+          setQuestionUnread((count) => count + newQuestions.length);
+          const now = Date.now();
+          if (now - lastQuestionToastAt.current >= 10_000) {
+            toast.info(
+              `${newQuestions.length} new question${newQuestions.length === 1 ? "" : "s"}`,
+              {
+                description: "Open the Questions tab to review them.",
+              },
+            );
+            lastQuestionToastAt.current = now;
+          }
+        }
+      } catch (e) {
+        if (active)
+          setQuestionError(
+            e instanceof Error ? e.message : "Could not load questions.",
+          );
+      }
+    }
+    void refreshInbox();
+    const timer = window.setInterval(refreshInbox, 8000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [code, isHost, join.session, tab]);
+
+  useEffect(() => {
+    if (!askOpen) return undefined;
+    let active = true;
+    async function refreshMine() {
+      try {
+        const questions = await api.myQuestions(code, join.session);
+        if (active) setMyQuestions(questions);
+      } catch (e) {
+        if (active)
+          setQuestionError(
+            e instanceof Error ? e.message : "Could not load your questions.",
+          );
+      }
+    }
+    void refreshMine();
+    const timer = window.setInterval(refreshMine, 8000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [askOpen, code, join.session]);
+
+  async function submitQuestion(event) {
+    event.preventDefault();
+    setQuestionBusy(true);
+    setQuestionError("");
+    setQuestionSent(false);
+    try {
+      if (editingQuestionId !== null) {
+        const question = await api.editMyQuestion(
+          code,
+          join.session,
+          editingQuestionId,
+          questionText,
+        );
+        setMyQuestions((current) =>
+          current.map((item) => (item.id === question.id ? question : item)),
+        );
+        setEditingQuestionId(null);
+      } else {
+        const question = await api.submitQuestion(code, join.session, {
+          text: questionText,
+          anonymous: anonymousQuestion,
+        });
+        setMyQuestions((current) => [...current, question]);
+      }
+      setQuestionText("");
+      setQuestionSent(true);
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not save your message.",
+      );
+    } finally {
+      setQuestionBusy(false);
+    }
+  }
+
+  async function deleteMyQuestion(questionId) {
+    try {
+      await api.deleteMyQuestion(code, join.session, questionId);
+      setMyQuestions((current) =>
+        current.filter((question) => question.id !== questionId),
+      );
+      if (editingQuestionId === questionId) {
+        setEditingQuestionId(null);
+        setQuestionText("");
+      }
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not delete your question.",
+      );
+    }
+  }
+
+  async function moderateQuestion(questionId, action) {
+    try {
+      const updated = await api.moderateQuestion(
+        code,
+        join.session,
+        questionId,
+        action,
+      );
+      setQuestionInbox((current) =>
+        current.map((question) =>
+          question.id === questionId ? updated : question,
+        ),
+      );
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not update this question.",
+      );
+    }
+  }
+
+  async function blockQuestionSender(questionId) {
+    try {
+      await api.blockQuestionSender(code, join.session, questionId);
+      toast.success("Sender blocked from asking questions");
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not block this sender.",
+      );
+    }
+  }
+
+  async function publishQuestion(questionId) {
+    await act(async () => {
+      const next = await api.publishQuestion(code, join.session, questionId);
+      setQuestionInbox((current) =>
+        current.map((question) =>
+          question.id === questionId
+            ? { ...question, status: "answered" }
+            : question,
+        ),
+      );
+      return next;
+    });
+  }
+
+  async function createAnnouncement(event) {
+    event.preventDefault();
+    setAnnouncementBusy(true);
+    try {
+      applySnapshot(
+        await api.createAnnouncement(code, join.session, announcementText),
+      );
+      setAnnouncementText("");
+      toast.success("Announcement pinned for everyone");
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not post announcement.",
+      );
+    } finally {
+      setAnnouncementBusy(false);
+    }
+  }
+
+  async function removeAnnouncement(announcementId) {
+    await act(() => api.deleteAnnouncement(code, join.session, announcementId));
+  }
+
+  async function editAnnouncement(announcementId, text) {
+    applySnapshot(
+      await api.editAnnouncement(code, join.session, announcementId, text),
+    );
+  }
+
+  async function exportQuestions() {
+    try {
+      const file = await api.exportQuestions(code, join.session);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `selah-${code}-questions.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setQuestionError(
+        e instanceof Error ? e.message : "Could not download questions.",
+      );
+    }
+  }
 
   const tabBtn = (key, label, count, alert) => (
     <button
       type="button"
       aria-pressed={tab === key}
       onClick={() => setTab(key)}
-      className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-semibold transition motion-reduce:transition-none ${
-        tab === key ? "bg-[#6495c4] text-[#fff]" : "text-slate-400 hover:text-slate-700"
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl  py-2 text-[13px] font-semibold transition motion-reduce:transition-none ${
+        tab === key
+          ? "bg-[#6495c4] text-[#fff]"
+          : "text-slate-400 hover:text-slate-700"
       }`}
     >
       {label} ({count})
-      {alert && <span className="h-2 w-2 rounded-full bg-[#F59E0B]" aria-hidden="true" />}
+      {alert &&
+        (key === "questions" ? (
+          <span className="rounded-full bg-[#F59E0B] px-1.5 py-0.5 text-[10px] leading-none text-white">
+            {questionUnread}
+          </span>
+        ) : (
+          <span
+            className="h-2 w-2 rounded-full bg-[#F59E0B]"
+            aria-hidden="true"
+          />
+        ))}
     </button>
   );
 
@@ -689,32 +1333,135 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               {MODES[snap.mode]}
             </span>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <p className="flex items-center gap-2 text-[13px] text-slate-500">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Live status */}
+            <div className="flex h-9 items-center gap-2 rounded-full border border-red-200/70 bg-red-50/80 px-3.5 shadow-sm backdrop-blur-xl">
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-50 motion-reduce:animate-none" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
               </span>
-              Live
-              <span className="text-slate-300">|</span>
-              <span><b className="font-semibold text-slate-800">{snap.speakers.length}/{snap.max_speakers}</b> Speakers</span>
-              <span className="text-slate-300">|</span>
-              <span><b className="font-semibold text-slate-800">{snap.listeners}</b> listening</span>
-            </p>
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+              <span className="text-[11px] font-semibold tracking-tight text-red-600">
+                Live
+              </span>
+            </div>
+
+            {/* Meeting stats */}
+            <div className="flex h-9 items-center overflow-hidden rounded-full border border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-xl">
+              {/* Speakers */}
+              <div className="flex items-center gap-1.5 px-3">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-3.5 w-3.5 text-slate-400"
+                >
+                  <path
+                    d="M15 19a6 6 0 0 0-12 0M9 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 11a3 3 0 1 0-2.5-4.7M16.5 15.2A5 5 0 0 1 21 19"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+                <span className="text-[11px] font-medium text-slate-500">
+                  Speakers
+                </span>
+
+                <span className="text-[11px] font-semibold text-slate-900">
+                  {snap.speakers.length}
+                  <span className="mx-0.5 text-slate-300">/</span>
+                  <span className="text-slate-400">{snap.max_speakers}</span>
+                </span>
+              </div>
+
+              <div className="h-4 w-px bg-slate-200" />
+
+              {/* Listeners */}
+              <div className="flex items-center gap-1.5 px-3">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-3.5 w-3.5 text-slate-400"
+                >
+                  <path
+                    d="M4 14.5a8 8 0 0 1 16 0M7 14.5a5 5 0 0 1 10 0M10 14.5a2 2 0 0 1 4 0M12 18.5v.01"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+                <span className="text-[11px] font-medium text-slate-500">
+                  Listening
+                </span>
+
+                <span className="text-[11px] font-semibold text-slate-900">
+                  {snap.listeners}
+                </span>
+              </div>
+
+              {/* Time */}
+              {snap.ends_at && (
+                <>
+                  <div className="h-4 w-px bg-slate-200" />
+
+                  <div className="flex items-center gap-1.5 px-3">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-3.5 w-3.5 text-slate-400"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="8.5"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                      />
+                      <path
+                        d="M12 7v5l3 2"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+
+                    <span className="text-[11px] font-medium text-slate-500">
+                      <MeetingCountdown endsAt={snap.ends_at} />
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Theme */}
+            <div className="flex h-9 items-center rounded-full border border-slate-200/80 bg-white/80 p-0.5 shadow-sm backdrop-blur-xl">
+              <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+            </div>
           </div>
         </header>
 
         {isHost && (
           <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
-            <div role="group" aria-label="Floor mode" className="flex rounded-xl bg-slate-100 p-0.5">
+            <div
+              role="group"
+              aria-label="Floor mode"
+              className="flex rounded-xl bg-slate-100 p-0.5"
+            >
               {Object.entries(MODES).map(([key, label]) => (
                 <button
                   key={key}
                   aria-pressed={snap.mode === key}
-                  onClick={() => act(() => api.updateSettings(code, join.session, { mode: key }))}
+                  onClick={() =>
+                    act(() =>
+                      api.updateSettings(code, join.session, { mode: key }),
+                    )
+                  }
                   className={`rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition motion-reduce:transition-none ${
-                    snap.mode === key ? "bg-[#6495c4] text-[#fff] shadow-sm" : "text-slate-500 hover:text-slate-800"
+                    snap.mode === key
+                      ? "bg-[#6495c4] text-[#fff] shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {label}
@@ -726,33 +1473,91 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               <select
                 value={snap.max_speakers}
                 onChange={(e) =>
-                  act(() => api.updateSettings(code, join.session, { speaker_limit: Number(e.target.value) }))
+                  act(() =>
+                    api.updateSettings(code, join.session, {
+                      speaker_limit: Number(e.target.value),
+                    }),
+                  )
                 }
                 className="rounded-lg border border-[#E4E8EE] bg-white px-2 py-1 text-[12px] font-semibold text-slate-800 outline-none focus-visible:outline-2 focus-visible:outline-[#1F8F78]"
               >
-                {Array.from({ length: MAX_SPEAKERS }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
+                {Array.from({ length: MAX_SPEAKERS }, (_, i) => i + 1).map(
+                  (n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ),
+                )}
               </select>
+            </label>
+            <label className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={snap.questions_enabled}
+                onChange={(e) =>
+                  act(() =>
+                    api.updateSettings(code, join.session, {
+                      questions_enabled: e.target.checked,
+                    }),
+                  )
+                }
+                className="h-4 w-4 accent-[#6495c4]"
+              />
+              Questions on
+            </label>
+            <label className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={snap.anonymous_questions_enabled}
+                onChange={(e) =>
+                  act(() =>
+                    api.updateSettings(code, join.session, {
+                      anonymous_questions_enabled: e.target.checked,
+                    }),
+                  )
+                }
+                className="h-4 w-4 accent-[#6495c4]"
+              />
+              Allow anonymous
             </label>
           </div>
         )}
 
+        {snap.announcements.map((announcement) => (
+          <PinnedAnnouncement
+            key={announcement.id}
+            announcement={announcement}
+            isHost={isHost}
+            onRemove={removeAnnouncement}
+            onSave={editAnnouncement}
+          />
+        ))}
+
         {hostNotice && (
-          <p role="status" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] font-medium text-amber-900">
+          <p
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] font-medium text-amber-900"
+          >
             {hostNotice}
           </p>
         )}
 
         {isSpeaker && !micOn && (
-          <p role="status" className="flex items-center gap-2 rounded-xl bg-[#E3F3EE] px-4 py-2.5 text-[13px] font-medium text-[#1F8F78]">
+          <p
+            role="status"
+            className="flex items-center gap-2 rounded-xl bg-[#E3F3EE] px-4 py-2.5 text-[13px] font-medium text-[#1F8F78]"
+          >
             <Icon name="mic" className="h-4 w-4" />
             You have the floor. Turn on your mic to speak.
           </p>
         )}
 
         {/* Stage: main view with other speakers stacked over its right edge */}
-        <section aria-label="On the floor" className="relative min-h-[320px] flex-1 overflow-hidden rounded-2xl bg-slate-100 md:min-h-0">
+        <section
+          aria-label="On the floor"
+          className="relative min-h-[320px] flex-1 overflow-hidden rounded-2xl bg-slate-100 md:min-h-0"
+        >
           {screenShareTrack ? (
             <>
               <div className="absolute inset-0 bg-slate-950">
@@ -762,13 +1567,19 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 />
               </div>
               <div className="absolute left-4 top-4 rounded-lg bg-black/55 px-3 py-1 text-[13px] font-medium text-white backdrop-blur-sm">
-                {screenShareTrack.participant.name || "Someone"} is sharing their screen
+                {screenShareTrack.participant.name || "Someone"} is sharing
+                their screen
               </div>
             </>
           ) : mainPerson ? (
             <>
               <div className="absolute inset-0">
-                <PersonTile key={mainPerson.identity} person={mainPerson} variant="main" {...tileProps} />
+                <PersonTile
+                  key={mainPerson.identity}
+                  person={mainPerson}
+                  variant="main"
+                  {...tileProps}
+                />
               </div>
               {thumbs.length > 0 && (
                 <div className="absolute bottom-3 right-3 top-3 flex flex-col gap-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -792,7 +1603,10 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               Nobody is on the floor yet.
             </div>
           )}
-          <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+          <div
+            className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+            aria-hidden="true"
+          >
             {reactions.map((reaction) => (
               <span
                 key={reaction.id}
@@ -822,7 +1636,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             >
               !
             </span>
-            <p className="min-w-0 flex-1 font-medium leading-relaxed">{error}</p>
+            <p className="min-w-0 flex-1 font-medium leading-relaxed">
+              {error}
+            </p>
             <button
               type="button"
               aria-label="Dismiss error"
@@ -835,7 +1651,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         )}
 
         {/* Controls */}
-        <footer className="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+        <footer className="flex justify-end flex-row items-start gap-3">
           <div />
           <div className="flex flex-wrap items-start justify-center gap-3">
             <div className="relative">
@@ -844,7 +1660,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 tone={reactionPickerOpen ? "green" : "glass"}
                 onClick={() => setReactionPickerOpen((open) => !open)}
               >
-                <span aria-hidden="true" className="text-xl leading-none">✨</span>
+                <span aria-hidden="true" className="text-xl leading-none">
+                  ✨
+                </span>
               </Control>
               {reactionPickerOpen && (
                 <div
@@ -868,15 +1686,27 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             </div>
             {!canSpeak &&
               (canJoinNow ? (
-                <Control label="Join the floor and turn on mic" tone="green" onClick={joinFloor}>
+                <Control
+                  label="Join the floor and turn on mic"
+                  tone="green"
+                  onClick={joinFloor}
+                >
                   <Icon name="mic" />
                 </Control>
               ) : inQueue ? (
-                <Control label="Lower hand" tone="amber" onClick={() => act(() => api.lowerHand(code, join.session))}>
+                <Control
+                  label="Lower hand"
+                  tone="amber"
+                  onClick={() => act(() => api.lowerHand(code, join.session))}
+                >
                   <Icon name="hand" />
                 </Control>
               ) : (
-                <Control label="Raise hand" tone="dark" onClick={() => act(() => api.raiseHand(code, join.session))}>
+                <Control
+                  label="Raise hand"
+                  tone="dark"
+                  onClick={() => act(() => api.raiseHand(code, join.session))}
+                >
                   <Icon name="hand" />
                 </Control>
               ))}
@@ -886,14 +1716,18 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 <Control
                   label={micOn ? "Mute mic" : "Turn on mic"}
                   tone={micOn ? "glass" : "dark"}
-                  onClick={toggle(() => localParticipant.setMicrophoneEnabled(!micOn))}
+                  onClick={toggle(() =>
+                    localParticipant.setMicrophoneEnabled(!micOn),
+                  )}
                 >
                   <Icon name={micOn ? "mic" : "micOff"} />
                 </Control>
                 <Control
                   label={cameraOn ? "Stop camera" : "Start camera"}
                   tone={cameraOn ? "glass" : "dark"}
-                  onClick={toggle(() => localParticipant.setCameraEnabled(!cameraOn))}
+                  onClick={toggle(() =>
+                    localParticipant.setCameraEnabled(!cameraOn),
+                  )}
                 >
                   <Icon name={cameraOn ? "video" : "videoOff"} />
                 </Control>
@@ -910,27 +1744,63 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 }
                 tone={isScreenShareEnabled ? "green" : "dark"}
                 onClick={toggleScreenShare}
-                disabled={screenShareBusy || (anotherScreenIsShared && !isScreenShareEnabled)}
+                disabled={
+                  screenShareBusy ||
+                  (anotherScreenIsShared && !isScreenShareEnabled)
+                }
               >
                 <Icon name="screenShare" />
               </Control>
             )}
 
             {isSpeaker && (
-              <Control label="Finish speaking" onClick={() => act(() => api.release(code, join.session, me))}>
+              <Control
+                label="Finish speaking"
+                onClick={() => act(() => api.release(code, join.session, me))}
+              >
                 <Icon name="stepDown" />
               </Control>
             )}
           </div>
           <div className="flex items-start justify-end gap-3">
+            {!isHost && snap.questions_enabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuestionError("");
+                  setQuestionSent(false);
+                  setAskOpen(true);
+                }}
+                className="rounded-xl bg-[#6495c4] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
+              >
+                Ask the host
+              </button>
+            )}
+            {!isHost && !snap.questions_enabled && (
+              <span className="self-center text-[11px] text-slate-500">
+                Questions are closed
+              </span>
+            )}
+            <Control
+              label="Leave meeting"
+              tone="dark"
+              onClick={leaveCall}
+              disabled={leaving}
+              busy={leaving}
+            >
+              <Icon name="power" />
+            </Control>
             {isHost && (
-              <Control label="End meeting for everyone" tone="dark" onClick={endMeeting} disabled={ending}>
-                <Icon name="power" />
+              <Control
+                label="End meeting for everyone"
+                tone="red"
+                onClick={endMeeting}
+                disabled={ending}
+                busy={ending}
+              >
+                <Icon name="phone" style={{ transform: "rotate(135deg)" }} />
               </Control>
             )}
-            <Control label="Leave meeting" tone="red" onClick={leaveCall} disabled={leaving}>
-              <Icon name="phone" style={{ transform: "rotate(135deg)" }} />
-            </Control>
           </div>
         </footer>
       </div>
@@ -940,18 +1810,39 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         aria-label="Meeting participants"
         className="m-3 flex max-h-[480px] min-h-0 flex-col gap-3 rounded-2xl bg-[#F5F7FA] p-3 md:m-3 md:ml-0 md:max-h-none"
       >
-        <div role="group" aria-label="Panel" className="flex rounded-2xl bg-white p-1 shadow-sm">
+        <div
+          role="group"
+          aria-label="Panel"
+          className="flex flex-wrap rounded-2xl bg-white shadow-sm"
+        >
           {tabBtn("people", "People", peopleCount, false)}
-          {tabBtn("hands", "Hands", activeQueue.length, isHost && activeQueue.length > 0)}
+          {tabBtn(
+            "hands",
+            "Hands",
+            activeQueue.length,
+            isHost && activeQueue.length > 0,
+          )}
+          {isHost &&
+            tabBtn(
+              "questions",
+              "Questions",
+              questionInbox.filter((question) => question.status === "pending")
+                .length,
+              questionUnread > 0,
+            )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {tab === "people" ? (
             <div className="flex flex-col gap-3">
               <section aria-label="On the floor">
-                <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">Speakers ({onStage.length})</h2>
+                <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
+                  Speakers ({onStage.length})
+                </h2>
                 {onStage.length === 0 ? (
-                  <p className="px-1 text-[13px] text-slate-400">Nobody is on the floor yet.</p>
+                  <p className="px-1 text-[13px] text-slate-400">
+                    Nobody is on the floor yet.
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
                     {onStage.map((p) => {
@@ -971,10 +1862,15 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                           }
                           subClass=""
                           right={
-                            isHost && !hostRow && (
+                            isHost &&
+                            !hostRow && (
                               <SmallBtn
                                 label={`Remove ${p.name} from the floor`}
-                                onClick={() => act(() => api.release(code, join.session, p.identity))}
+                                onClick={() =>
+                                  act(() =>
+                                    api.release(code, join.session, p.identity),
+                                  )
+                                }
                                 className="bg-[#FF3B30]/10 text-[#FF3B30]"
                               >
                                 <Icon name="userMinus" className="h-4 w-4" />
@@ -989,21 +1885,36 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               </section>
 
               <section aria-label="Listening">
-                <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">Participants ({listeners.length})</h2>
+                <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
+                  Participants ({listeners.length})
+                </h2>
                 {listeners.length === 0 ? (
-                  <p className="px-1 text-[13px] text-slate-400">No other participants yet.</p>
+                  <p className="px-1 text-[13px] text-slate-400">
+                    No other participants yet.
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
                     {listeners.map((p) => {
-                      const waiting = p.queued || snap.queue.some((q) => q.identity === p.identity);
+                      const waiting =
+                        p.queued ||
+                        snap.queue.some((q) => q.identity === p.identity);
                       return (
                         <PersonRow
                           key={p.identity}
                           p={p}
                           me={me}
                           sub={waiting ? "Hand raised" : "Listening"}
-                          subClass={waiting ? "text-[#B7791F]" : "text-slate-400"}
-                          right={waiting && <Icon name="hand" className="h-4 w-4 text-[#F59E0B]" />}
+                          subClass={
+                            waiting ? "text-[#B7791F]" : "text-slate-400"
+                          }
+                          right={
+                            waiting && (
+                              <Icon
+                                name="hand"
+                                className="h-4 w-4 text-[#F59E0B]"
+                              />
+                            )
+                          }
                         />
                       );
                     })}
@@ -1011,7 +1922,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 )}
               </section>
             </div>
-          ) : (
+          ) : tab === "hands" ? (
             <section aria-label="Speaking queue">
               {activeQueue.length === 0 ? (
                 <p className="px-1 pt-1 text-[13px] text-slate-400">
@@ -1032,16 +1943,28 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                         isHost && (
                           <div className="flex gap-1.5">
                             <SmallBtn
-                              label={floorFull ? "The floor is full. Release a speaker first." : `Give floor to ${p.name}`}
+                              label={
+                                floorFull
+                                  ? "The floor is full. Release a speaker first."
+                                  : `Give floor to ${p.name}`
+                              }
                               disabled={floorFull}
-                              onClick={() => act(() => api.grant(code, join.session, p.identity))}
+                              onClick={() =>
+                                act(() =>
+                                  api.grant(code, join.session, p.identity),
+                                )
+                              }
                               className="bg-[#34C759] text-white"
                             >
                               <Icon name="check" className="h-4 w-4" />
                             </SmallBtn>
                             <SmallBtn
                               label={`Decline ${p.name}`}
-                              onClick={() => act(() => api.reject(code, join.session, p.identity))}
+                              onClick={() =>
+                                act(() =>
+                                  api.reject(code, join.session, p.identity),
+                                )
+                              }
                               className="bg-[#767680]/15 text-[#3A3A3C]"
                             >
                               <Icon name="x" className="h-4 w-4" />
@@ -1054,9 +1977,355 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 </ol>
               )}
             </section>
+          ) : (
+            <section
+              aria-label="Host questions"
+              className="flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between gap-2 px-1">
+                <div>
+                  <h2 className="text-[13px] font-semibold text-slate-800">
+                    Private host inbox
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    Only you can read these. Kept for 7 days after the meeting.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={exportQuestions}
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Download
+                </button>
+              </div>
+
+              {questionError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700"
+                >
+                  {questionError}
+                </p>
+              )}
+
+              <form
+                onSubmit={createAnnouncement}
+                className="rounded-xl border border-[#D8E4F0] bg-white p-3"
+              >
+                <label
+                  htmlFor="announcement-text"
+                  className="block text-[12px] font-semibold text-slate-700"
+                >
+                  Pin an announcement for everyone
+                </label>
+                <textarea
+                  id="announcement-text"
+                  value={announcementText}
+                  onChange={(event) => setAnnouncementText(event.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-[12px] outline-none focus:border-[#6495c4]"
+                />
+                <button
+                  type="submit"
+                  disabled={announcementBusy || !announcementText.trim()}
+                  className="mt-2 rounded-lg bg-[#6495c4] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                >
+                  {announcementBusy ? "Pinning…" : "Pin announcement"}
+                </button>
+              </form>
+
+              {questionInbox.length === 0 ? (
+                <p className="rounded-xl bg-white p-4 text-[12px] text-slate-500">
+                  No messages yet.
+                </p>
+              ) : (
+                questionInbox.map((question) => {
+                  const isPublic = snap.announcements.some(
+                    (announcement) =>
+                      announcement.source_question_id === question.id,
+                  );
+                  return (
+                    <article
+                      key={question.id}
+                      className="rounded-xl border border-slate-200 bg-white p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-600">
+                          Message
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(question.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-800">
+                        {question.text}
+                      </p>
+                      <p className="mt-2 text-[11px] font-medium text-slate-500">
+                        {question.anonymous ? "Anonymous" : question.author}
+                        {" · "}
+                        {question.status}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {question.status === "pending" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void moderateQuestion(question.id, "answered")
+                              }
+                              className="rounded-lg bg-[#E3F3EE] px-2 py-1.5 text-[10px] font-semibold text-[#1F8F78]"
+                            >
+                              Mark answered
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void moderateQuestion(question.id, "dismissed")
+                              }
+                              className="rounded-lg bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-600"
+                            >
+                              Dismiss
+                            </button>
+                          </>
+                        )}
+                        {!isPublic && (
+                          <button
+                            type="button"
+                            onClick={() => void publishQuestion(question.id)}
+                            className="rounded-lg bg-[#EEF7FF] px-2 py-1.5 text-[10px] font-semibold text-[#37688F]"
+                          >
+                            Show to everyone
+                          </button>
+                        )}
+                        {isPublic && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void act(() =>
+                                api.inviteQuestionSender(
+                                  code,
+                                  join.session,
+                                  question.id,
+                                ),
+                              )
+                            }
+                            className="rounded-lg bg-[#34C759]/15 px-2 py-1.5 text-[10px] font-semibold text-[#17813A]"
+                          >
+                            Invite to speak
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void blockQuestionSender(question.id)}
+                          className="ml-auto rounded-lg bg-red-50 px-2 py-1.5 text-[10px] font-semibold text-red-700"
+                        >
+                          Block sender
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </section>
           )}
         </div>
       </aside>
+      {askOpen && !isHost && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4"
+          onMouseDown={(event) =>
+            event.target === event.currentTarget && setAskOpen(false)
+          }
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ask-host-title"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2
+                  id="ask-host-title"
+                  className="text-lg font-semibold text-slate-900"
+                >
+                  Ask the host
+                </h2>
+                <p className="mt-1 text-[12px] text-slate-500">
+                  Only the host can read your messages.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAskOpen(false)}
+                aria-label="Close"
+                className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={submitQuestion} className="mt-4">
+              <label
+                htmlFor="question-text"
+                className="block text-[12px] font-semibold text-slate-700"
+              >
+                Your message
+              </label>
+              <textarea
+                id="question-text"
+                value={questionText}
+                onChange={(event) => {
+                  setQuestionText(event.target.value);
+                  setQuestionSent(false);
+                }}
+                maxLength={500}
+                required
+                rows={4}
+                placeholder="Write a message to the host…"
+                className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-2.5 text-[13px] outline-none focus:border-[#6495c4]"
+              />
+              {editingQuestionId === null && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <fieldset>
+                    <legend className="text-[11px] font-semibold text-slate-600">
+                      Name
+                    </legend>
+                    <div className="mt-1 flex gap-2">
+                      <label className="flex items-center gap-1.5 text-[12px] text-slate-700">
+                        <input
+                          type="radio"
+                          name="question-anonymity"
+                          checked={!anonymousQuestion}
+                          onChange={() => setAnonymousQuestion(false)}
+                        />
+                        With my name
+                      </label>
+                      <label
+                        className={`flex items-center gap-1.5 text-[12px] ${snap.anonymous_questions_enabled ? "text-slate-700" : "text-slate-400"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="question-anonymity"
+                          checked={anonymousQuestion}
+                          disabled={!snap.anonymous_questions_enabled}
+                          onChange={() => setAnonymousQuestion(true)}
+                        />
+                        Anonymous
+                      </label>
+                    </div>
+                  </fieldset>
+                </div>
+              )}
+              {editingQuestionId === null && (
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                  Anonymous: the host won’t see your name. Selah keeps a private
+                  record only to prevent abuse.
+                </p>
+              )}
+              {questionError && (
+                <p
+                  role="alert"
+                  className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700"
+                >
+                  {questionError}
+                </p>
+              )}
+              {questionSent && (
+                <p
+                  role="status"
+                  className="mt-3 text-[12px] font-semibold text-[#1F8F78]"
+                >
+                  {editingQuestionId !== null ? "Saved" : "Sent"}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={questionBusy || !questionText.trim()}
+                className="mt-4 w-full rounded-xl bg-[#6495c4] px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+              >
+                {questionBusy
+                  ? "Saving…"
+                  : editingQuestionId !== null
+                    ? "Save changes"
+                    : "Send"}
+              </button>
+              {editingQuestionId !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingQuestionId(null);
+                    setQuestionText("");
+                    setQuestionError("");
+                  }}
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-[12px] font-semibold text-slate-600"
+                >
+                  Cancel editing
+                </button>
+              )}
+            </form>
+
+            <section className="mt-6 border-t border-slate-100 pt-4">
+              <h3 className="text-[12px] font-semibold text-slate-700">
+                Your messages
+              </h3>
+              {myQuestions.length === 0 ? (
+                <p className="mt-2 text-[12px] text-slate-400">
+                  Your sent messages will appear here.
+                </p>
+              ) : (
+                <ul className="mt-2 flex flex-col gap-2">
+                  {myQuestions.map((question) => (
+                    <li
+                      key={question.id}
+                      className="flex items-start gap-2 rounded-xl bg-slate-50 p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="whitespace-pre-wrap break-words text-[12px] text-slate-700">
+                          {question.text}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          {question.status} ·{" "}
+                          {new Date(question.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      {question.status === "pending" &&
+                        !snap.announcements.some(
+                          (announcement) =>
+                            announcement.source_question_id === question.id,
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingQuestionId(question.id);
+                              setQuestionText(question.text);
+                              setQuestionError("");
+                              setQuestionSent(false);
+                            }}
+                            aria-label="Edit your message"
+                            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-[#37688F] hover:bg-blue-50"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      <button
+                        type="button"
+                        onClick={() => void deleteMyQuestion(question.id)}
+                        aria-label="Delete your message"
+                        className="rounded-lg px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

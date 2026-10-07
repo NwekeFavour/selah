@@ -14,7 +14,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from . import livekit
-from .models import Participant, Room
+from .models import Announcement, Participant, Question, Room
 
 CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no look-alike characters
 SESSION_SALT = "selah.session"
@@ -76,6 +76,7 @@ def snapshot(room):
     queue = sorted((p for p in guests if p.role == LISTENER and p.queued_at), key=lambda p: p.queued_at)
     return {
         "version": room.version,
+        "title": room.title,
         "ended": room.ended,
         "mode": room.mode,
         "host": _person(host) if host else {
@@ -98,6 +99,27 @@ def snapshot(room):
         "max_speakers": room.speaker_limit,
         "listeners": sum(1 for p in guests if p.connected and p.role == LISTENER),
         "ends_at": room.ends_at.isoformat(),
+        "questions_enabled": room.questions_enabled,
+        "anonymous_questions_enabled": room.anonymous_questions_enabled,
+        "announcements": [
+            {
+                "id": announcement.pk,
+                "source_question_id": announcement.question_id,
+                "text": announcement.text,
+                "anonymous": announcement.anonymous,
+                "author": (
+                    "Anonymous"
+                    if announcement.anonymous
+                    else announcement.question.sender.name
+                    if announcement.question_id
+                    else "Host"
+                ),
+                "created_at": announcement.created_at.isoformat(),
+            }
+            for announcement in room.announcements.filter(active=True)
+            .select_related("question__sender")
+            .order_by("-created_at")
+        ],
     }
 
 
@@ -389,7 +411,14 @@ def remove(code, actor_identity, target_identity):
     return _flush(room, snap, fx)
 
 
-def update_settings(code, actor_identity, mode=None, speaker_limit=None):
+def update_settings(
+    code,
+    actor_identity,
+    mode=None,
+    speaker_limit=None,
+    questions_enabled=None,
+    anonymous_questions_enabled=None,
+):
     fx = Effects()
     with transaction.atomic():
         room = _lock(code)
@@ -398,10 +427,254 @@ def update_settings(code, actor_identity, mode=None, speaker_limit=None):
             room.mode = mode
         if speaker_limit:
             room.speaker_limit = min(speaker_limit, cfg("MAX_SPEAKERS"))
-        room.save(update_fields=["mode", "speaker_limit"])
+        if questions_enabled is not None:
+            room.questions_enabled = questions_enabled
+        if anonymous_questions_enabled is not None:
+            room.anonymous_questions_enabled = anonymous_questions_enabled
+        room.save(update_fields=[
+            "mode",
+            "speaker_limit",
+            "questions_enabled",
+            "anonymous_questions_enabled",
+        ])
         _fill_open(room, fx)
         snap = _bump(room)
     return _flush(room, snap, fx)
+
+
+# ---- Private host questions -------------------------------------------------
+
+def _question_data(question, for_host):
+    data = {
+        "id": question.pk,
+        "text": question.text,
+        "kind": question.kind,
+        "status": question.status,
+        "anonymous": question.anonymous,
+        "created_at": question.created_at.isoformat(),
+    }
+    if for_host:
+        data["author"] = "Anonymous" if question.anonymous else question.sender.name
+    return data
+
+
+def _question_room(code):
+    try:
+        return Room.objects.select_for_update().get(code=code.lower())
+    except Room.DoesNotExist:
+        raise RoomError("Meeting not found.", 404)
+
+
+def submit_question(code, actor_identity, text, kind, anonymous=False):
+    with transaction.atomic():
+        room = _question_room(code)
+        if _room_ended(room):
+            raise RoomError("This meeting has ended.", 410)
+        participant = _participant(room, actor_identity)
+        if not room.questions_enabled:
+            raise RoomError("The host turned off questions.", 403)
+        if participant.blocked_from_questions:
+            raise RoomError("You cannot send questions in this meeting.", 403)
+        if anonymous and not room.anonymous_questions_enabled:
+            raise RoomError("Anonymous questions are disabled by the host.", 403)
+        now = timezone.now()
+        questions = Question.objects.filter(room=room, sender=participant)
+        if questions.count() >= 5:
+            raise RoomError("You have reached the five-question limit for this meeting.", 429)
+        if questions.filter(created_at__gte=now - timedelta(seconds=20)).exists():
+            raise RoomError("Please wait 20 seconds before sending another question.", 429)
+        question = Question.objects.create(
+            room=room,
+            sender=participant,
+            text=text,
+            kind=kind,
+            anonymous=anonymous,
+        )
+        return _question_data(question, for_host=False)
+
+
+def list_my_questions(code, actor_identity):
+    room = Room.objects.filter(code=code.lower()).first()
+    if not room:
+        raise RoomError("Meeting not found.", 404)
+    participant = _participant(room, actor_identity)
+    return [
+        _question_data(question, for_host=False)
+        for question in Question.objects.filter(
+            room=room, sender=participant, deleted_by_sender=False
+        )
+    ]
+
+
+def delete_my_question(code, actor_identity, question_id):
+    with transaction.atomic():
+        room = _question_room(code)
+        participant = _participant(room, actor_identity)
+        question = Question.objects.filter(
+            room=room, sender=participant, pk=question_id, deleted_by_sender=False
+        ).first()
+        if not question:
+            raise RoomError("Question not found.", 404)
+        question.deleted_by_sender = True
+        question.save(update_fields=["deleted_by_sender"])
+    return {"deleted": True}
+
+
+def edit_my_question(code, actor_identity, question_id, text):
+    with transaction.atomic():
+        room = _question_room(code)
+        if _room_ended(room):
+            raise RoomError("This meeting has ended.", 410)
+        participant = _participant(room, actor_identity)
+        question = Question.objects.filter(
+            room=room,
+            sender=participant,
+            pk=question_id,
+            deleted_by_sender=False,
+            status=Question.Status.PENDING,
+            announcement__isnull=True,
+        ).first()
+        if not question:
+            raise RoomError("Only your pending, unpublished messages can be edited.", 409)
+        question.text = text
+        question.save(update_fields=["text"])
+    return _question_data(question, for_host=False)
+
+
+def list_questions_for_host(code, actor_identity):
+    room = Room.objects.filter(code=code.lower()).first()
+    if not room:
+        raise RoomError("Meeting not found.", 404)
+    _require_host(_participant(room, actor_identity))
+    questions = Question.objects.filter(room=room, deleted_by_sender=False).select_related("sender")
+    return [_question_data(question, for_host=True) for question in questions]
+
+
+def moderate_question(code, actor_identity, question_id, action):
+    with transaction.atomic():
+        room = _question_room(code)
+        _require_host(_participant(room, actor_identity))
+        question = Question.objects.filter(
+            room=room, pk=question_id, deleted_by_sender=False
+        ).select_related("sender").first()
+        if not question:
+            raise RoomError("Question not found.", 404)
+        question.status = action
+        question.save(update_fields=["status"])
+    return _question_data(question, for_host=True)
+
+
+def block_question_sender(code, actor_identity, question_id):
+    with transaction.atomic():
+        room = _question_room(code)
+        _require_host(_participant(room, actor_identity))
+        question = Question.objects.filter(
+            room=room, pk=question_id, deleted_by_sender=False
+        ).select_related("sender").first()
+        if not question:
+            raise RoomError("Question not found.", 404)
+        question.sender.blocked_from_questions = True
+        question.sender.save(update_fields=["blocked_from_questions"])
+    return {"blocked": True}
+
+
+def invite_question_sender(code, actor_identity, question_id):
+    room = Room.objects.filter(code=code.lower()).first()
+    if not room:
+        raise RoomError("Meeting not found.", 404)
+    _require_host(_participant(room, actor_identity))
+    question = Question.objects.filter(
+        room=room,
+        pk=question_id,
+        deleted_by_sender=False,
+        announcement__isnull=False,
+    ).select_related("sender").first()
+    if not question:
+        raise RoomError("Show the question to everyone before inviting its sender to speak.", 409)
+    return grant(code, actor_identity, question.sender.identity)
+
+
+def create_announcement(code, actor_identity, text, question_id=None):
+    with transaction.atomic():
+        room = _question_room(code)
+        _require_host(_participant(room, actor_identity))
+        if _room_ended(room):
+            raise RoomError("This meeting has ended.", 410)
+        if Announcement.objects.filter(room=room, active=True).count() >= 5:
+            raise RoomError("Remove an existing announcement before adding another.", 409)
+        if question_id:
+            question = Question.objects.filter(
+                room=room, pk=question_id, deleted_by_sender=False
+            ).select_related("sender").first()
+            if not question:
+                raise RoomError("Question not found.", 404)
+            announcement, created = Announcement.objects.get_or_create(
+                question=question,
+                defaults={
+                    "room": room,
+                    "text": question.text,
+                    "anonymous": question.anonymous,
+                },
+            )
+            if not created:
+                raise RoomError("This question has already been shown to everyone.", 409)
+            question.status = Question.Status.ANSWERED
+            question.save(update_fields=["status"])
+        else:
+            announcement = Announcement.objects.create(room=room, text=text)
+        snap = _bump(room)
+    _flush(room, snap, Effects())
+    return {"id": announcement.pk, "snapshot": snap}
+
+
+def delete_announcement(code, actor_identity, announcement_id):
+    with transaction.atomic():
+        room = _question_room(code)
+        _require_host(_participant(room, actor_identity))
+        announcement = Announcement.objects.filter(room=room, pk=announcement_id).first()
+        if not announcement:
+            raise RoomError("Announcement not found.", 404)
+        announcement.delete()
+        snap = _bump(room)
+    _flush(room, snap, Effects())
+    return snap
+
+
+def edit_announcement(code, actor_identity, announcement_id, text):
+    with transaction.atomic():
+        room = _question_room(code)
+        _require_host(_participant(room, actor_identity))
+        if _room_ended(room):
+            raise RoomError("This meeting has ended.", 410)
+        announcement = Announcement.objects.filter(room=room, pk=announcement_id).first()
+        if not announcement:
+            raise RoomError("Announcement not found.", 404)
+        announcement.text = text
+        announcement.save(update_fields=["text"])
+        if announcement.question_id:
+            Question.objects.filter(pk=announcement.question_id).update(text=text)
+        snap = _bump(room)
+    _flush(room, snap, Effects())
+    return snap
+
+
+def question_export_rows(code, actor_identity):
+    room = Room.objects.filter(code=code.lower()).first()
+    if not room:
+        raise RoomError("Meeting not found.", 404)
+    _require_host(_participant(room, actor_identity))
+    return [
+        {
+            "text": question.text,
+            "kind": question.get_kind_display(),
+            "author": "Anonymous" if question.anonymous else question.sender.name,
+            "status": question.get_status_display(),
+            "created_at": question.created_at.isoformat(),
+        }
+        for question in Question.objects.filter(room=room, deleted_by_sender=False)
+        .select_related("sender")
+        .order_by("created_at")
+    ]
 
 
 def start_screen_share(code, identity):
@@ -508,8 +781,9 @@ def end_room(code, identity):
         _require_host(actor)
         room.ended = True
         room.screen_share_identity = ""
-        room.save(update_fields=["ended", "screen_share_identity"])
         now = timezone.now()
+        room.ended_at = now
+        room.save(update_fields=["ended", "ended_at", "screen_share_identity"])
         room.participants.filter(connected=True, banned=False).update(
             connected=False,
             disconnected_at=now,
@@ -548,9 +822,13 @@ def sweep_once(now=None):
     now = now or timezone.now()
     done = 0
     for room in Room.objects.filter(ended=False, opened_at__isnull=False, ends_at__lte=now):
-        Room.objects.filter(pk=room.pk).update(ended=True)
+        Room.objects.filter(pk=room.pk).update(ended=True, ended_at=now)
         livekit.get_client().delete_room(room.code)
         done += 1
+    retention_cutoff = now - timedelta(days=7)
+    expired_rooms = Room.objects.filter(ended_at__lte=retention_cutoff)
+    Question.objects.filter(room__in=expired_rooms).delete()
+    Announcement.objects.filter(room__in=expired_rooms).delete()
     holding = (
         Participant.objects.filter(connected=False, disconnected_at__isnull=False, banned=False, room__ended=False)
         .filter(Q(role=SPEAKER) | Q(queued_at__isnull=False))

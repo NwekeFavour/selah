@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from . import services
-from .models import Participant, Room
+from .models import Announcement, Participant, Question, Room
 
 
 class FakeLiveKit:
@@ -49,21 +49,26 @@ class RoomTests(TestCase):
         self.addCleanup(patcher.stop)
         self.api = APIClient()
         self.n = 0
+        self.guest_clients = {}
 
     # -- helpers
     def create(self, mode="approval"):
         r = self.api.post("/api/rooms/", {"title": "Panel", "mode": mode}, format="json")
         self.assertEqual(r.status_code, 201)
-        return r.json()
+        room = r.json()
+        return room
 
     def join(self, code, name="Guest", guest=None, host_key=None, avatar=None):
         self.n += 1
-        body = {"display_name": name, "guest_id": guest or f"guest-id-{self.n:04d}-xxxx"}
+        identity = guest or f"guest-id-{self.n:04d}-xxxx"
+        client = self.guest_clients.setdefault((code, identity), APIClient())
         if host_key:
-            body["host_key"] = host_key
+            client.cookies[f"selah_host_{code}"] = host_key
+        client.cookies[f"selah_guest_{code}"] = identity
+        body = {"display_name": name}
         if avatar is not None:
             body["avatar"] = avatar
-        r = self.api.post(f"/api/rooms/{code}/join/", body, format="json")
+        r = client.post(f"/api/rooms/{code}/join/", body, format="json")
         return r
 
     def person(self, code, name="Guest", host_key=None, guest=None, avatar=None):
@@ -102,6 +107,101 @@ class RoomTests(TestCase):
         self.assertIn("publish=True|admin=True", host["token"])
         self.assertIn("publish=False|admin=False", g["token"])
         self.assertEqual(host["livekit_url"], "wss://test.livekit.cloud")
+
+    def test_room_credentials_are_http_only_cookies(self):
+        created = self.api.post("/api/rooms/", {"title": "Panel"}, format="json")
+        room_code = created.json()["code"]
+        self.assertIn("host_key", created.json())
+        host_cookie = created.cookies[f"selah_host_{room_code}"]
+        self.assertTrue(host_cookie["httponly"])
+        self.assertEqual(host_cookie["path"], f"/api/rooms/{room_code}/")
+
+        host = self.join(room_code, "Host", host_key=host_cookie.value)
+        self.assertEqual(host.status_code, 200)
+        guest_cookie = host.cookies[f"selah_guest_{room_code}"]
+        self.assertTrue(guest_cookie["httponly"])
+        self.assertNotIn(guest_cookie.value, host.content.decode())
+
+    def test_host_can_join_with_tab_scoped_key_when_cookie_is_unavailable(self):
+        room = self.create()
+        response = APIClient().post(
+            f"/api/rooms/{room['code']}/join/",
+            {
+                "display_name": "Host",
+                "guest_id": "ignored-client-value",
+                "host_key": room["host_key"],
+            },
+            format="json",
+            HTTP_ORIGIN="http://localhost:5173",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("publish=True|admin=True", response.json()["token"])
+
+    def test_host_key_fallback_rejects_untrusted_origin(self):
+        room = self.create()
+        response = APIClient().post(
+            f"/api/rooms/{room['code']}/join/",
+            {"display_name": "Host", "host_key": room["host_key"]},
+            format="json",
+            HTTP_ORIGIN="https://malicious.example",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_guest_id_fallback_reuses_same_participant_without_cookies(self):
+        room = self.create()
+        host = self.join(room["code"], "Host", host_key=room["host_key"])
+        self.assertEqual(host.status_code, 200)
+        guest_id = "stable-tab-guest-identifier"
+        client = APIClient()
+        path = f"/api/rooms/{room['code']}/join/"
+
+        first = client.post(
+            path,
+            {"display_name": "Daniel", "guest_id": guest_id},
+            format="json",
+        )
+        client.cookies.pop(f"selah_guest_{room['code']}", None)
+        second = client.post(
+            path,
+            {"display_name": "Daniel", "guest_id": guest_id},
+            format="json",
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["identity"], second.json()["identity"])
+        self.assertEqual(len(second.json()["snapshot"]["participants"]), 1)
+
+    @override_settings(DEBUG=False)
+    def test_room_credentials_are_secure_in_production(self):
+        created = self.api.post("/api/rooms/", {"title": "Panel"}, format="json")
+        cookie = created.cookies[f"selah_host_{created.json()['code']}"]
+        self.assertTrue(cookie["secure"])
+        self.assertEqual(cookie["samesite"], "None")
+
+    def test_legacy_guest_id_body_does_not_resume_participant(self):
+        room = self.create()
+        response = APIClient().post(
+            f"/api/rooms/{room['code']}/join/",
+            {
+                "display_name": "Host",
+                "guest_id": "legacy-guest-identifier",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 425)
+
+    def test_room_cookie_auth_rejects_untrusted_origins(self):
+        room = self.create()
+        client = APIClient()
+        client.cookies[f"selah_host_{room['code']}"] = room["host_key"]
+        response = client.post(
+            f"/api/rooms/{room['code']}/join/",
+            {"display_name": "Host"},
+            format="json",
+            HTTP_ORIGIN="https://malicious.example",
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_guest_waits_until_host_opens_call(self):
         room = self.create()
@@ -241,7 +341,7 @@ class RoomTests(TestCase):
         r = self.act(host, "floor/remove/", {"identity": a["identity"]})
         self.assertEqual(r.status_code, 200)
         self.assertIn(a["identity"], self.lk.calls[-1]["remove"])
-        again = self.api.post(f"/api/rooms/{code}/join/", {"display_name": "G0", "guest_id": "guest-id-0002-xxxx"}, format="json")
+        again = self.join(code, "G0", guest="guest-id-0002-xxxx")
         self.assertEqual(again.status_code, 403)
 
     def test_rejoin_keeps_identity_and_queue_place(self):
@@ -384,6 +484,263 @@ class RoomTests(TestCase):
         self.assertFalse(Room.objects.get(code=code).ended)
         self.assertEqual(self.lk.deleted, [])
 
+    def test_questions_are_private_and_host_inbox_is_host_only(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        submitted = guest_client.post(
+            f"/api/rooms/{code}/questions/",
+            {"text": "Private question", "kind": "question", "anonymous": True},
+            format="json",
+        )
+        self.assertEqual(submitted.status_code, 201)
+        self.assertTrue(submitted.json()["anonymous"])
+
+        inbox = self.act(host, f"questions/inbox/", method="get")
+        self.assertEqual(inbox.status_code, 200)
+        self.assertEqual(inbox.json()[0]["author"], "Anonymous")
+        denied = self.act(guest, "questions/inbox/", method="get")
+        self.assertEqual(denied.status_code, 403)
+        public_state = self.act(guest, "state/", method="get").json()
+        self.assertEqual(public_state["title"], "Panel")
+        self.assertEqual(public_state["announcements"], [])
+        self.assertNotIn(
+            "Private question",
+            str([call["snap"] for call in self.lk.calls]),
+        )
+
+    def test_questions_setting_anonymity_limit_and_sender_deletion(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        path = f"/api/rooms/{code}/questions/"
+
+        self.act(host, "settings/", {"anonymous_questions_enabled": False})
+        denied_anonymous = client.post(
+            path,
+            {"text": "Please keep this private", "kind": "question", "anonymous": True},
+            format="json",
+        )
+        self.assertEqual(denied_anonymous.status_code, 403)
+
+        first = client.post(
+            path,
+            {"text": "First question", "kind": "question", "anonymous": False},
+            format="json",
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(
+            client.delete(f"{path}{first.json()['id']}/").status_code,
+            200,
+        )
+        self.assertEqual(client.get(path).json(), [])
+
+        self.act(host, "settings/", {"questions_enabled": False})
+        paused = client.post(
+            path,
+            {"text": "Stale form", "kind": "suggestion", "anonymous": False},
+            format="json",
+        )
+        self.assertEqual(paused.status_code, 403)
+        self.assertEqual(paused.json()["detail"], "The host turned off questions.")
+        snapshot = self.act(guest, "state/", method="get").json()
+        self.assertFalse(snapshot["questions_enabled"])
+
+    def test_question_limits_and_owner_checks(self):
+        code, host, (guest, other) = self.setup_room(guests=2)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        other_client = APIClient()
+        other_client.credentials(HTTP_AUTHORIZATION=f"Bearer {other['session']}")
+        path = f"/api/rooms/{code}/questions/"
+        created = []
+        for index in range(5):
+            Question.objects.filter(room__code=code).update(
+                created_at=timezone.now() - timedelta(seconds=21)
+            )
+            response = guest_client.post(
+                path,
+                {"text": f"Question {index}", "kind": "question"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+            created.append(response.json()["id"])
+
+        blocked = guest_client.post(
+            path,
+            {"text": "Too many", "kind": "question"},
+            format="json",
+        )
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(other_client.delete(f"{path}{created[0]}/").status_code, 404)
+
+    def test_participant_can_edit_only_own_pending_unpublished_message(self):
+        code, host, (guest, other) = self.setup_room(guests=2)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        other_client = APIClient()
+        other_client.credentials(HTTP_AUTHORIZATION=f"Bearer {other['session']}")
+        host_client = APIClient()
+        host_client.credentials(HTTP_AUTHORIZATION=f"Bearer {host['session']}")
+        path = f"/api/rooms/{code}/questions/"
+
+        submitted = guest_client.post(path, {"text": "Original message"}, format="json")
+        self.assertEqual(submitted.status_code, 201)
+        question_id = submitted.json()["id"]
+        self.assertEqual(submitted.json()["kind"], "question")
+        self.assertEqual(
+            other_client.patch(f"{path}{question_id}/", {"text": "Not yours"}, format="json").status_code,
+            409,
+        )
+        edited = guest_client.patch(
+            f"{path}{question_id}/",
+            {"text": "Updated message"},
+            format="json",
+        )
+        self.assertEqual(edited.status_code, 200)
+        self.assertEqual(edited.json()["text"], "Updated message")
+        self.assertEqual(
+            host_client.post(f"{path}{question_id}/publish/", {}, format="json").status_code,
+            201,
+        )
+        rejected = guest_client.patch(
+            f"{path}{question_id}/",
+            {"text": "Change after publishing"},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 409)
+
+    def test_host_can_edit_announcements_and_linked_public_messages(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        host_client = APIClient()
+        host_client.credentials(HTTP_AUTHORIZATION=f"Bearer {host['session']}")
+        question_path = f"/api/rooms/{code}/questions/"
+        submitted = guest_client.post(
+            question_path,
+            {"text": "Published original", "anonymous": True},
+            format="json",
+        )
+        question_id = submitted.json()["id"]
+        host_client.post(f"{question_path}{question_id}/publish/", {}, format="json")
+        announcement = Announcement.objects.get(question_id=question_id)
+
+        forbidden = guest_client.patch(
+            f"/api/rooms/{code}/announcements/{announcement.pk}/",
+            {"text": "Unauthorized"},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        updated = host_client.patch(
+            f"/api/rooms/{code}/announcements/{announcement.pk}/",
+            {"text": "Edited by host"},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["announcements"][0]["text"], "Edited by host")
+        self.assertEqual(Question.objects.get(pk=question_id).text, "Edited by host")
+        self.assertTrue(updated.json()["announcements"][0]["anonymous"])
+
+        standalone = host_client.post(
+            f"/api/rooms/{code}/announcements/",
+            {"text": "Standalone"},
+            format="json",
+        )
+        standalone_id = Announcement.objects.get(room__code=code, question__isnull=True).pk
+        updated_standalone = host_client.patch(
+            f"/api/rooms/{code}/announcements/{standalone_id}/",
+            {"text": "Standalone edited"},
+            format="json",
+        )
+        self.assertEqual(updated_standalone.status_code, 200)
+        self.assertIn("Standalone edited", str(updated_standalone.json()["announcements"]))
+
+    def test_moderation_publish_invite_and_export_preserve_anonymity(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        host_client = APIClient()
+        host_client.credentials(HTTP_AUTHORIZATION=f"Bearer {host['session']}")
+        path = f"/api/rooms/{code}/questions/"
+        submitted = guest_client.post(
+            path,
+            {"text": "I would like to share a thought", "kind": "suggestion", "anonymous": True},
+            format="json",
+        )
+        question_id = submitted.json()["id"]
+        inbox = host_client.get(f"{path}inbox/").json()
+        self.assertEqual(inbox[0]["author"], "Anonymous")
+        self.assertNotIn("identity", inbox[0])
+
+        published = host_client.post(
+            f"{path}{question_id}/publish/",
+            {},
+            format="json",
+        )
+        self.assertEqual(published.status_code, 201)
+        announcement = published.json()["announcements"][0]
+        self.assertTrue(announcement["anonymous"])
+        self.assertEqual(announcement["author"], "Anonymous")
+        self.assertEqual(announcement["text"], "I would like to share a thought")
+        invited = host_client.post(f"{path}{question_id}/invite/", {}, format="json")
+        self.assertEqual(invited.status_code, 200)
+        self.assertEqual(invited.json()["speakers"][0]["identity"], guest["identity"])
+
+        exported = host_client.get(f"{path}export/")
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("Anonymous", exported.content.decode())
+        self.assertNotIn(guest["identity"], exported.content.decode())
+
+        for index in range(4):
+            pinned = host_client.post(
+                f"/api/rooms/{code}/announcements/",
+                {"text": f"Host announcement {index}"},
+                format="json",
+            )
+            self.assertEqual(pinned.status_code, 201)
+        overflow = host_client.post(
+            f"/api/rooms/{code}/announcements/",
+            {"text": "Too many announcements"},
+            format="json",
+        )
+        self.assertEqual(overflow.status_code, 409)
+
+    def test_question_block_and_seven_day_retention(self):
+        code, host, (guest,) = self.setup_room(guests=1)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {guest['session']}")
+        path = f"/api/rooms/{code}/questions/"
+        posted = client.post(
+            path,
+            {"text": "Please help", "kind": "question"},
+            format="json",
+        )
+        question_id = posted.json()["id"]
+        self.assertEqual(self.act(host, f"questions/{question_id}/block/").status_code, 200)
+        blocked = client.post(
+            path,
+            {"text": "Another question", "kind": "question"},
+            format="json",
+        )
+        self.assertEqual(blocked.status_code, 403)
+        self.assertEqual(blocked.json()["detail"], "You cannot send questions in this meeting.")
+
+        room = Room.objects.get(code=code)
+        question = Question.objects.get(pk=question_id)
+        Announcement.objects.create(
+            room=room,
+            question=question,
+            text=question.text,
+            anonymous=question.anonymous,
+        )
+        room.ended = True
+        room.ended_at = timezone.now() - timedelta(days=8)
+        room.save(update_fields=["ended", "ended_at"])
+        services.sweep_once()
+        self.assertFalse(Question.objects.filter(room=room).exists())
+        self.assertFalse(Announcement.objects.filter(room=room).exists())
+
     def test_meeting_ends_at_time_limit(self):
         code, host, _ = self.setup_room(guests=0)
         services.sweep_once(timezone.now() + timedelta(minutes=settings.SELAH["MEETING_MINUTES"] + 1))
@@ -443,7 +800,7 @@ class RoomTests(TestCase):
     def test_validation_and_cleaning(self):
         self.assertEqual(self.api.post("/api/rooms/", {"mode": "chaos"}, format="json").status_code, 400)
         room = self.create()
-        r = self.api.post(f"/api/rooms/{room['code']}/join/", {"display_name": "   ", "guest_id": "guest-id-9999-xxxx"}, format="json")
+        r = self.join(room["code"], "   ", guest="guest-id-9999-xxxx")
         self.assertEqual(r.status_code, 400)
         self.person(room["code"], "Host", host_key=room["host_key"])
         p = self.person(room["code"], "  Ada \n\t Obi  ")

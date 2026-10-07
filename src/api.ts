@@ -1,4 +1,4 @@
-import type { JoinResult, Mode, Snapshot } from "./types";
+import type { JoinResult, Mode, Question, Snapshot } from "./types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "http://localhost:8000/api").replace(/\/+$/, "");
 
@@ -21,11 +21,18 @@ function messageFrom(data: unknown, status: number): string {
   return `Something went wrong (${status}).`;
 }
 
-async function call<T>(path: string, body?: unknown, session?: string): Promise<T> {
+async function call<T>(
+  path: string,
+  body?: unknown,
+  session?: string,
+  method?: string,
+  responseType: "json" | "blob" = "json",
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method: method ?? (body === undefined ? "GET" : "POST"),
+      credentials: "include",
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(session ? { Authorization: `Bearer ${session}` } : {}),
@@ -39,14 +46,19 @@ async function call<T>(path: string, body?: unknown, session?: string): Promise<
     const data = await res.json().catch(() => null);
     throw new ApiError(messageFrom(data, res.status), res.status);
   }
-  return res.json() as Promise<T>;
+  return responseType === "blob" ? res.blob() as Promise<T> : res.json() as Promise<T>;
 }
 
 export const api = {
   createRoom: (title: string, mode: Mode = "approval") =>
     call<{ code: string; host_key: string }>("/rooms/", { title, mode }),
-  join: (code: string, display_name: string, guest_id: string, host_key?: string, avatar?: string) =>
-    call<JoinResult>(`/rooms/${code}/join/`, { display_name, guest_id, host_key, avatar }),
+  join: (
+    code: string,
+    display_name: string,
+    avatar?: string,
+    host_key?: string,
+    guest_id?: string,
+  ) => call<JoinResult>(`/rooms/${code}/join/`, { display_name, avatar, host_key, guest_id }),
   meetingStatus: (code: string) => call<{ ended: boolean }>(`/rooms/${code}/status/`),
   state: (code: string, session: string) => call<Snapshot>(`/rooms/${code}/state/`, undefined, session),
   leave: (code: string, session: string) => call<Snapshot>(`/rooms/${code}/leave/`, {}, session),
@@ -65,8 +77,41 @@ export const api = {
     call<Snapshot>(`/rooms/${code}/floor/release/`, { identity }, s),
   remove: (code: string, s: string, identity: string) =>
     call<Snapshot>(`/rooms/${code}/floor/remove/`, { identity }, s),
-  updateSettings: (code: string, s: string, settings: { mode?: Mode; speaker_limit?: number }) =>
+  updateSettings: (code: string, s: string, settings: {
+    mode?: Mode;
+    speaker_limit?: number;
+    questions_enabled?: boolean;
+    anonymous_questions_enabled?: boolean;
+  }) =>
     call<Snapshot>(`/rooms/${code}/settings/`, settings, s),
+  myQuestions: (code: string, s: string) =>
+    call<Question[]>(`/rooms/${code}/questions/`, undefined, s),
+  submitQuestion: (code: string, s: string, question: {
+    text: string;
+    anonymous: boolean;
+  }) => call<Question>(`/rooms/${code}/questions/`, question, s),
+  editMyQuestion: (code: string, s: string, questionId: number, text: string) =>
+    call<Question>(`/rooms/${code}/questions/${questionId}/`, { text }, s, "PATCH"),
+  deleteMyQuestion: (code: string, s: string, questionId: number) =>
+    call<{ deleted: boolean }>(`/rooms/${code}/questions/${questionId}/`, undefined, s, "DELETE"),
+  questionInbox: (code: string, s: string) =>
+    call<Question[]>(`/rooms/${code}/questions/inbox/`, undefined, s),
+  moderateQuestion: (code: string, s: string, questionId: number, action: "answered" | "dismissed") =>
+    call<Question>(`/rooms/${code}/questions/${questionId}/moderate/`, { action }, s),
+  blockQuestionSender: (code: string, s: string, questionId: number) =>
+    call<{ blocked: boolean }>(`/rooms/${code}/questions/${questionId}/block/`, {}, s),
+  inviteQuestionSender: (code: string, s: string, questionId: number) =>
+    call<Snapshot>(`/rooms/${code}/questions/${questionId}/invite/`, {}, s),
+  publishQuestion: (code: string, s: string, questionId: number) =>
+    call<Snapshot>(`/rooms/${code}/questions/${questionId}/publish/`, {}, s),
+  createAnnouncement: (code: string, s: string, text: string) =>
+    call<Snapshot>(`/rooms/${code}/announcements/`, { text }, s),
+  deleteAnnouncement: (code: string, s: string, announcementId: number) =>
+    call<Snapshot>(`/rooms/${code}/announcements/${announcementId}/`, undefined, s, "DELETE"),
+  editAnnouncement: (code: string, s: string, announcementId: number, text: string) =>
+    call<Snapshot>(`/rooms/${code}/announcements/${announcementId}/`, { text }, s, "PATCH"),
+  exportQuestions: (code: string, s: string) =>
+    call<Blob>(`/rooms/${code}/questions/export/`, undefined, s, undefined, "blob"),
   startScreenShare: (code: string, s: string) =>
     call<{ identity: string; name: string }>(`/rooms/${code}/screen-share/start/`, {}, s),
   stopScreenShare: (code: string, s: string) =>

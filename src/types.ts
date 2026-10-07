@@ -17,6 +17,7 @@ export interface Participant extends Person {
 /** Full room state, owned by the server and broadcast on every change. */
 export interface Snapshot {
   version: number;
+  title: string;
   ended: boolean;
   mode: Mode;
   host: Person;
@@ -26,6 +27,28 @@ export interface Snapshot {
   max_speakers: number; // the host's current speaker limit
   listeners: number; // connected people who are not speaking
   ends_at: string | null;
+  questions_enabled: boolean;
+  anonymous_questions_enabled: boolean;
+  announcements: Announcement[];
+}
+
+export interface Question {
+  id: number;
+  text: string;
+  kind: "question" | "suggestion";
+  status: "pending" | "answered" | "dismissed";
+  anonymous: boolean;
+  created_at: string;
+  author?: string;
+}
+
+export interface Announcement {
+  id: number;
+  source_question_id: number | null;
+  text: string;
+  anonymous: boolean;
+  author: string;
+  created_at: string;
 }
 
 export interface JoinResult {

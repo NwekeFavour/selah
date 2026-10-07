@@ -404,23 +404,24 @@ const MODES = {
 };
 
 const COMPANY = { name: "OKNOWN", url: "" };
-const HOST_KEY_PREFIX = "selah.host.";
+const HOST_MEETING_PREFIX = "selah.host.title.";
 
 function removeSavedHostMeeting(code) {
-  localStorage.removeItem(`${HOST_KEY_PREFIX}${code}`);
-  localStorage.removeItem(`${HOST_KEY_PREFIX}title.${code}`);
+  localStorage.removeItem(`selah.host.${code}`);
+  localStorage.removeItem(`selah.hostroom.${code}`);
+  localStorage.removeItem(`${HOST_MEETING_PREFIX}${code}`);
 }
 
 function savedHostMeetings() {
   const meetings = [];
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
-    if (!key?.startsWith(HOST_KEY_PREFIX) || key.startsWith(`${HOST_KEY_PREFIX}title.`)) continue;
-    const code = key.slice(HOST_KEY_PREFIX.length);
+    if (!key?.startsWith(HOST_MEETING_PREFIX)) continue;
+    const code = key.slice(HOST_MEETING_PREFIX.length);
     if (!/^[a-z2-9]{3}(?:-[a-z2-9]{3}){2}$/.test(code)) continue;
     meetings.push({
       code,
-      title: localStorage.getItem(`${HOST_KEY_PREFIX}title.${code}`) || `Selah ${code}`,
+      title: localStorage.getItem(key) || `Selah ${code}`,
     });
   }
   return meetings.sort((a, b) => a.title.localeCompare(b.title));

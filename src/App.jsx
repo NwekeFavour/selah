@@ -6,24 +6,38 @@ import Selah from "./assets/selah.webp";
 import { Avatar, AvatarPicker } from "./avatar";
 import { avatarBg, avatarFromIdentity, getSavedAvatar, randomAvatar, saveAvatar } from "./avatarData";
 
-function guestId() {
-  let id = localStorage.getItem("selah.guest");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("selah.guest", id);
-  }
-  return id;
-}
-
 const codeFromUrl = () =>
   window.location.pathname.match(/^\/r\/([\w-]+)/)?.[1] ?? null;
 
 const joinedKey = (roomCode) => `selah.joined.${roomCode}`;
-const hostKeyFor = (roomCode) => localStorage.getItem(`selah.host.${roomCode}`) ?? undefined;
+const hostMeetingKey = (roomCode) => `selah.host.title.${roomCode}`;
+const hostMarkerKey = (roomCode) => `selah.hostroom.${roomCode}`;
+const hostAccessKey = (roomCode) => sessionStorage.getItem(`selah.host.key.${roomCode}`) ?? undefined;
+const guestIdentityKey = (roomCode) => `selah.guest.${roomCode}`;
+
+function guestIdentityFor(roomCode) {
+  let identity = sessionStorage.getItem(guestIdentityKey(roomCode));
+  if (!identity) {
+    identity = crypto.randomUUID();
+    sessionStorage.setItem(guestIdentityKey(roomCode), identity);
+  }
+  return identity;
+}
+
+function clearLegacyCredentials() {
+  localStorage.removeItem("selah.guest");
+  const legacyHostKeys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    .filter((key) => key?.startsWith("selah.host.") && !key.startsWith("selah.host.title."));
+  legacyHostKeys.forEach((key) => localStorage.removeItem(key));
+}
+
+clearLegacyCredentials();
 
 function removeSavedHostMeeting(roomCode) {
+  sessionStorage.removeItem(`selah.host.key.${roomCode}`);
   localStorage.removeItem(`selah.host.${roomCode}`);
-  localStorage.removeItem(`selah.host.title.${roomCode}`);
+  localStorage.removeItem(hostMarkerKey(roomCode));
+  localStorage.removeItem(hostMeetingKey(roomCode));
 }
 
 function clearRoomSession(roomCode) {
@@ -73,9 +87,14 @@ export default function App() {
     if (!code || !sessionStorage.getItem(joinedKey(code))) return;
     let active = true;
     const displayName = localStorage.getItem("selah.name") ?? "";
-    const hostKey = hostKeyFor(code);
 
-    api.join(code, displayName, guestId(), hostKey, getSavedAvatar(code) ?? avatarFromIdentity(guestId()))
+    api.join(
+      code,
+      displayName,
+      getSavedAvatar(code) ?? avatarFromIdentity(`${code}:${displayName}`),
+      hostAccessKey(code),
+      guestIdentityFor(code),
+    )
       .then((result) => {
         if (active) setJoined(result);
       })
@@ -108,10 +127,16 @@ export default function App() {
     let active = true;
     let timer;
     async function retryJoin() {
-      const hostKey = hostKeyFor(code);
+      const isHost = localStorage.getItem(hostMarkerKey(code)) !== null;
       try {
         const displayName = localStorage.getItem("selah.name") ?? "";
-        const result = await api.join(code, displayName, guestId(), hostKey, getSavedAvatar(code) ?? avatarFromIdentity(guestId()));
+        const result = await api.join(
+          code,
+          displayName,
+          getSavedAvatar(code) ?? avatarFromIdentity(`${code}:${displayName}`),
+          hostAccessKey(code),
+          guestIdentityFor(code),
+        );
         if (!active) return;
         sessionStorage.setItem(joinedKey(code), "1");
         setWaitingForHost(false);
@@ -119,9 +144,9 @@ export default function App() {
       } catch (err) {
         if (!active) return;
         if (err instanceof ApiError && err.status === 425) {
-          if (hostKey) {
+          if (isHost) {
             setWaitingForHost(false);
-            setError("Your saved host access was not accepted. Reopen this meeting from Your meetings in the browser where you created it.");
+            setError("This browser could not verify host access. Open this meeting in the same tab and browser that created it. Meetings created before this fix may need to be started again.");
             return;
           }
           timer = window.setTimeout(retryJoin, 3000);
@@ -152,23 +177,29 @@ export default function App() {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const hostKey = hostKeyFor(code);
+    const isHost = localStorage.getItem(hostMarkerKey(code)) !== null;
     try {
       localStorage.setItem("selah.name", name.trim());
       saveAvatar(code, getSavedAvatar(code) ?? selectedAvatar);
-      const result = await api.join(code, name.trim(), guestId(), hostKey, getSavedAvatar(code));
+      const result = await api.join(
+        code,
+        name.trim(),
+        getSavedAvatar(code),
+        hostAccessKey(code),
+        guestIdentityFor(code),
+      );
       sessionStorage.setItem(joinedKey(code), "1");
       setJoined(result);
     } catch (err) {
       if (err instanceof ApiError && err.status === 425) {
-        if (hostKey) {
-          setError("Your saved host access was not accepted. Reopen this meeting from Your meetings in the browser where you created it.");
+        if (isHost) {
+          setError("This browser could not verify host access. Open this meeting in the same tab and browser that created it. Meetings created before this fix may need to be started again.");
           return;
         }
         setWaitingForHost(true);
         return;
       }
-      if (err instanceof ApiError && err.status === 410 && hostKey) {
+      if (err instanceof ApiError && err.status === 410 && isHost) {
         clearRoomSession(code);
       }
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -198,7 +229,7 @@ export default function App() {
     return <Home onEnter={enter} />;
   }
 
-  const isHost = Boolean(localStorage.getItem(`selah.host.${code}`));
+  const isHost = localStorage.getItem(hostMarkerKey(code)) !== null;
 
   return (
     <JoinScreen
@@ -319,7 +350,7 @@ function JoinScreen({
                   You’ll join automatically when the host opens the call.
                 </p>
                 <p className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-[13px] leading-snug text-slate-500">
-                  If you created this meeting, reopen it from <strong className="text-slate-700">Your meetings</strong> on the same browser you used to create it. The invite link gives guest access.
+                  If you created this meeting, reopen it from <strong className="text-slate-700">Your meetings</strong> using the same device you used to create it. The invite link provides guest access.
                 </p>
                 <button
                   type="button"

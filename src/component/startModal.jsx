@@ -83,8 +83,9 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
     setError("");
     try {
       const room = await api.createRoom(title.trim(), mode);
-      localStorage.setItem(`selah.host.${room.code}`, room.host_key);
       localStorage.setItem(`selah.host.title.${room.code}`, title.trim());
+      localStorage.setItem(`selah.hostroom.${room.code}`, "1");
+      sessionStorage.setItem(`selah.host.key.${room.code}`, room.host_key);
       onMeetingCreated?.(room.code);
       setCode(room.code);
     } catch (err) {

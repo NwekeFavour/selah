@@ -1,7 +1,11 @@
 import functools
+import csv
+import io
 import logging
+import secrets
 
 from django.conf import settings
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -10,11 +14,37 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import livekit, services
-from .models import Participant
-from .serializers import CreateSerializer, IdentitySerializer, JoinSerializer, SettingsSerializer
+from .models import Participant, Question
+from .serializers import (
+    AnnouncementSerializer,
+    CreateSerializer,
+    IdentitySerializer,
+    JoinSerializer,
+    QuestionActionSerializer,
+    QuestionCreateSerializer,
+    SettingsSerializer,
+    TextUpdateSerializer,
+)
 from .services import RoomError
 
 log = logging.getLogger(__name__)
+ROOM_CREDENTIAL_COOKIE_AGE = 60 * 60 * 24 * 30
+
+
+def _room_cookie_name(kind, code):
+    return f"selah_{kind}_{code.lower()}"
+
+
+def _set_room_cookie(response, kind, code, value, max_age):
+    response.set_cookie(
+        _room_cookie_name(kind, code),
+        value,
+        max_age=max_age,
+        path=f"/api/rooms/{code}/",
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax" if settings.DEBUG else "None",
+    )
 
 
 class SessionAuthentication(BaseAuthentication):
@@ -61,7 +91,12 @@ class CreateRoom(APIView):
         data = CreateSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         room, host_key = services.create_room(data.validated_data["title"], data.validated_data["mode"])
-        return Response({"code": room.code, "host_key": host_key}, status=status.HTTP_201_CREATED)
+        response = Response(
+            {"code": room.code, "host_key": host_key},
+            status=status.HTTP_201_CREATED,
+        )
+        _set_room_cookie(response, "host", room.code, host_key, ROOM_CREDENTIAL_COOKIE_AGE)
+        return response
 
 
 class JoinRoom(APIView):
@@ -71,18 +106,29 @@ class JoinRoom(APIView):
 
     @handled
     def post(self, request, code):
+        host_cookie = request.COOKIES.get(_room_cookie_name("host", code), "")
+        guest_cookie = request.COOKIES.get(_room_cookie_name("guest", code), "")
+        origin = request.headers.get("Origin")
         data = JoinSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         v = data.validated_data
-        return Response(
-            services.join(
-                code,
-                v["display_name"],
-                v["guest_id"],
-                v.get("host_key") or None,
-                v.get("avatar", ""),
-            )
+        host_key = v.get("host_key") or host_cookie
+        if (
+            host_key or guest_cookie or v.get("guest_id")
+        ) and origin and origin not in settings.CORS_ALLOWED_ORIGINS:
+            return Response({"detail": "Origin not allowed."}, status=status.HTTP_403_FORBIDDEN)
+        cookie_guest_id = guest_cookie if 8 <= len(guest_cookie) <= 100 else ""
+        guest_id = cookie_guest_id or v.get("guest_id") or secrets.token_urlsafe(32)
+        result = services.join(
+            code,
+            v["display_name"],
+            guest_id,
+            host_key or None,
+            v.get("avatar", ""),
         )
+        response = Response(result)
+        _set_room_cookie(response, "guest", code, guest_id, settings.SELAH["SESSION_MAX_AGE"])
+        return response
 
 
 class RoomStatus(APIView):
@@ -165,7 +211,169 @@ class RoomSettings(FloorView):
         data = SettingsSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         v = data.validated_data
-        return Response(services.update_settings(code, request.user.identity, v.get("mode"), v.get("speaker_limit")))
+        return Response(services.update_settings(
+            code,
+            request.user.identity,
+            v.get("mode"),
+            v.get("speaker_limit"),
+            v.get("questions_enabled"),
+            v.get("anonymous_questions_enabled"),
+        ))
+
+
+class QuestionCollection(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def get(self, request, code):
+        return Response(services.list_my_questions(code, request.user.identity))
+
+    @handled
+    def post(self, request, code):
+        data = QuestionCreateSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        return Response(
+            services.submit_question(
+                code,
+                request.user.identity,
+                v["text"],
+                Question.Kind.QUESTION,
+                v["anonymous"],
+            ),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MyQuestionDetail(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def delete(self, request, code, question_id):
+        return Response(services.delete_my_question(code, request.user.identity, question_id))
+
+    @handled
+    def patch(self, request, code, question_id):
+        data = TextUpdateSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        return Response(services.edit_my_question(
+            code,
+            request.user.identity,
+            question_id,
+            data.validated_data["text"],
+        ))
+
+
+class HostQuestionInbox(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def get(self, request, code):
+        return Response(services.list_questions_for_host(code, request.user.identity))
+
+
+class HostQuestionAction(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def post(self, request, code, question_id):
+        data = QuestionActionSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        return Response(services.moderate_question(
+            code,
+            request.user.identity,
+            question_id,
+            data.validated_data["action"],
+        ))
+
+
+class BlockQuestionSender(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def post(self, request, code, question_id):
+        return Response(services.block_question_sender(code, request.user.identity, question_id))
+
+
+class InviteQuestionSender(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def post(self, request, code, question_id):
+        return Response(services.invite_question_sender(code, request.user.identity, question_id))
+
+
+class QuestionExport(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def get(self, request, code):
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Question or suggestion", "Type", "Name", "Status", "Submitted at"])
+        for question in services.question_export_rows(code, request.user.identity):
+            cells = [
+                question["text"],
+                question["kind"],
+                question["author"],
+                question["status"],
+                question["created_at"],
+            ]
+            writer.writerow([
+                f"'{cell}" if cell.startswith(("=", "+", "-", "@", "\t", "\r")) else cell
+                for cell in cells
+            ])
+        response = HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="selah-{code}-questions.csv"'
+        return response
+
+
+class HostAnnouncements(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def post(self, request, code):
+        data = AnnouncementSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        result = services.create_announcement(
+            code,
+            request.user.identity,
+            data.validated_data["text"],
+        )
+        return Response(result["snapshot"], status=status.HTTP_201_CREATED)
+
+
+class PublishQuestion(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def post(self, request, code, question_id):
+        result = services.create_announcement(
+            code,
+            request.user.identity,
+            "",
+            question_id=question_id,
+        )
+        return Response(result["snapshot"], status=status.HTTP_201_CREATED)
+
+
+class DeleteAnnouncement(FloorView):
+    throttle_scope = "questions"
+
+    @handled
+    def delete(self, request, code, announcement_id):
+        return Response(services.delete_announcement(code, request.user.identity, announcement_id))
+
+    @handled
+    def patch(self, request, code, announcement_id):
+        data = TextUpdateSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        return Response(services.edit_announcement(
+            code,
+            request.user.identity,
+            announcement_id,
+            data.validated_data["text"],
+        ))
 
 
 class StartScreenShare(FloorView):

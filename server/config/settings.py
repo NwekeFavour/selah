@@ -20,6 +20,7 @@ if not DEBUG and SECRET_KEY == "dev-only-insecure-key":
 
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 CORS_ALLOWED_ORIGINS = [o.strip() for o in env("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+CORS_ALLOW_CREDENTIALS = True
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -90,7 +91,13 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"create": "20/hour", "join": "60/min", "floor": "120/min", "status": "120/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "create": "20/hour",
+        "join": "60/min",
+        "floor": "120/min",
+        "status": "120/min",
+        "questions": "60/min",
+    },
 }
 
 # LiveKit
