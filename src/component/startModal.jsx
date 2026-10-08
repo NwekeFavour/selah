@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 
 const MODES = [
-  { key: "approval", title: "Host approval", body: "You approve each speaker from the queue." },
-  { key: "open", title: "Open floor", body: "Anyone can speak while spots are free. Hands queue up once it is full." },
+  { key: "approval", title: "Host approval", body: "The host approves each person from the queue before they can speak." },
+  { key: "open", title: "Open floor", body: "Anyone can turn on their mic while a speaker spot is free. Requests wait in line when the floor is full." },
 ];
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled])";

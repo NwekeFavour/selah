@@ -307,7 +307,7 @@ def get_state(participant):
 # ---- The floor --------------------------------------------------------------
 
 def request_floor(code, identity):
-    """Promote into a free spot unless an earlier request is waiting; otherwise queue."""
+    """Open floor promotes into a free spot; approval mode always queues for the host."""
     fx = Effects()
     with transaction.atomic():
         room = _lock(code)
@@ -322,7 +322,11 @@ def request_floor(code, identity):
             .order_by("queued_at")
             .first()
         )
-        if free_spot and (first_waiting is None or first_waiting.pk == p.pk):
+        if (
+            room.mode == Room.Mode.OPEN
+            and free_spot
+            and (first_waiting is None or first_waiting.pk == p.pk)
+        ):
             _promote(p, fx)
         elif not p.queued_at:
             p.queued_at = timezone.now()

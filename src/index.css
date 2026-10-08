@@ -59,6 +59,10 @@
   background-color: #171a20 !important;
 }
 
+.tabss{
+  scrollbar-width: none;
+}
+
 .room-theme[data-theme="dark"] [class~="bg-slate-200"] {
   background-color: #22262e !important;
 }

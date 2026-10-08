@@ -135,6 +135,7 @@ function Control({
   tone = "glass",
   disabled,
   busy = false,
+  shortcut,
   children,
 }) {
   return (
@@ -142,6 +143,7 @@ function Control({
       type="button"
       aria-label={busy ? `${label}, in progress` : label}
       title={label}
+      aria-keyshortcuts={shortcut}
       onClick={onClick}
       disabled={disabled || busy}
       aria-busy={busy}
@@ -412,6 +414,16 @@ export default function Room({
   }, [theme]);
 
   useEffect(() => {
+    const deadline = Date.parse(join.snapshot.ends_at ?? "");
+    if (!Number.isFinite(deadline)) return undefined;
+    const timer = window.setTimeout(
+      beginMeetingEnding,
+      Math.max(0, deadline - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [beginMeetingEnding, join.snapshot.ends_at]);
+
+  useEffect(() => {
     if (endingAt === null) return undefined;
     const tick = window.setInterval(() => setEndingNow(Date.now()), 100);
     const finish = window.setTimeout(
@@ -434,7 +446,7 @@ export default function Room({
       <LiveKitRoom
         serverUrl={join.livekit_url}
         token={join.token}
-        connect
+        connect={endingAt === null}
         audio={false}
         video={false}
         onDisconnected={handleLiveKitDisconnected}
@@ -526,7 +538,13 @@ function AnnouncementText({ text }) {
   );
 }
 
-function PinnedAnnouncement({ announcement, isHost, onRemove, onSave }) {
+function PinnedAnnouncement({
+  announcement,
+  isHost,
+  onRemove,
+  onSave,
+  label = "Pinned announcement",
+}) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(announcement.text);
@@ -553,7 +571,7 @@ function PinnedAnnouncement({ announcement, isHost, onRemove, onSave }) {
     <div className="flex items-start gap-3 rounded-xl border border-[#B9D7F1] bg-[#EEF7FF] px-4 py-3 text-[13px] text-slate-700">
       <div className="min-w-0 flex-1">
         <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#37688F]">
-          Pinned announcement
+          {label}
         </p>
         {editing ? (
           <form
@@ -695,10 +713,13 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [floorBusy, setFloorBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
   const [screenShareBusy, setScreenShareBusy] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [reactions, setReactions] = useState([]);
   const [pinnedId, setPinnedId] = useState(null); // local only: whose tile this viewer wants in the main view
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
   const [tab, setTab] = useState("people");
   const [questionInbox, setQuestionInbox] = useState([]);
   const [myQuestions, setMyQuestions] = useState([]);
@@ -716,6 +737,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const initialInboxLoaded = useRef(false);
   const lastQuestionToastAt = useRef(0);
   const warnedMeeting = useRef(null);
+  const announcementPointerStart = useRef(null);
   const [hostNotice, setHostNotice] = useState(() =>
     join.snapshot.host.identity &&
     !join.snapshot.host.connected &&
@@ -733,6 +755,12 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ]);
   const participants = useParticipants();
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timeout = window.setTimeout(() => setError(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [error]);
 
   const addReaction = useCallback(
     (emoji, senderIdentity = join.identity) => {
@@ -910,20 +938,63 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     }
   }
 
-  async function joinFloor() {
+  async function updateFloor(request, enableMicrophone = false) {
+    if (floorBusy) return;
+    setFloorBusy(true);
     setError("");
     try {
-      const next = await api.raiseHand(code, join.session);
+      const next = await request();
       applySnapshot(next);
-      if (next.speakers.some((p) => p.identity === me)) {
+      if (
+        enableMicrophone &&
+        next.speakers.some((p) => p.identity === me)
+      ) {
         await localParticipant.setMicrophoneEnabled(true);
       }
     } catch (e) {
       fail(e);
+    } finally {
+      setFloorBusy(false);
     }
   }
 
-  async function leaveCall() {
+  function joinFloor() {
+    return updateFloor(() => api.raiseHand(code, join.session), true);
+  }
+
+  function raiseHand() {
+    return updateFloor(() => api.raiseHand(code, join.session));
+  }
+
+  function lowerHand() {
+    return updateFloor(() => api.lowerHand(code, join.session));
+  }
+
+  function requestConfirmation({
+    title,
+    message,
+    confirmLabel = "Confirm",
+    onConfirm,
+  }) {
+    setConfirmation({ title, message, confirmLabel, onConfirm });
+  }
+
+  function confirmRequestedAction() {
+    const onConfirm = confirmation?.onConfirm;
+    setConfirmation(null);
+    if (onConfirm) void onConfirm();
+  }
+
+  function leaveCall() {
+    requestConfirmation({
+      title: "Leave this meeting?",
+      message: "You will leave the call. You can rejoin while the meeting is still open.",
+      confirmLabel: "Leave meeting",
+      onConfirm: performLeaveCall,
+    });
+  }
+
+  async function performLeaveCall() {
     if (leaving) return;
     setLeaving(true);
     setError("");
@@ -943,16 +1014,11 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
 
   function endMeeting() {
     if (ending) return;
-    toast("End this meeting for everyone?", {
-      description: "Everyone in the call will be disconnected.",
-      duration: Infinity,
-      action: {
-        label: "End meeting",
-        onClick: () => void confirmEndMeeting(),
-      },
-      cancel: {
-        label: "Cancel",
-      },
+    requestConfirmation({
+      title: "End this meeting for everyone?",
+      message: "Everyone in the call will be disconnected and cannot rejoin this meeting.",
+      confirmLabel: "End meeting",
+      onConfirm: confirmEndMeeting,
     });
   }
 
@@ -977,6 +1043,18 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
 
   async function toggleScreenShare() {
     if (screenShareBusy) return;
+    if (
+      !isScreenShareEnabled &&
+      (!window.isSecureContext ||
+        typeof navigator.mediaDevices?.getDisplayMedia !== "function")
+    ) {
+      setError(
+        !window.isSecureContext
+          ? "Screen sharing requires a secure HTTPS connection."
+          : "This browser does not support screen sharing. Try a current version of Chrome, Edge, Firefox, or Safari.",
+      );
+      return;
+    }
     setScreenShareBusy(true);
     setError("");
     try {
@@ -1004,7 +1082,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         const name = e instanceof Error ? e.name : "";
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
           throw new Error(
-            "Screen sharing was cancelled or blocked. Choose a screen or window and try again.",
+            "Screen sharing was cancelled or blocked by browser permissions. If Selah is embedded in another site, allow screen capture for it.",
             { cause: e },
           );
         }
@@ -1019,7 +1097,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         e instanceof ApiError
           ? e.message
           : name === "NotAllowedError" || name === "PermissionDeniedError"
-            ? "Screen sharing was cancelled or blocked. Choose a screen or window and try again."
+          ? "Screen sharing was cancelled or blocked by browser permissions. If Selah is embedded in another site, allow screen capture for it."
             : name === "NotFoundError"
               ? "No screen is available to share."
               : name === "NotReadableError" || name === "AbortError"
@@ -1040,14 +1118,47 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
 
   const me = join.identity;
   const isHost = snap.host.identity === me;
-  console.log(isHost);
   const isSpeaker = snap.speakers.some((p) => p.identity === me);
   const inQueue = snap.queue.some((p) => p.identity === me);
   const canSpeak = isHost || isSpeaker;
   const floorFull = snap.speakers.length >= snap.max_speakers;
   const queueHead = snap.queue[0]?.identity;
-  const canJoinNow = !floorFull && (!queueHead || queueHead === me);
+  const canJoinNow =
+    snap.mode === "open" && !floorFull && (!queueHead || queueHead === me);
   const micOn = localParticipant.isMicrophoneEnabled;
+  useEffect(() => {
+    if (!canSpeak) return undefined;
+    function handleMicrophoneShortcut(event) {
+      if (
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.repeat ||
+        event.key.toLowerCase() !== "b"
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      localParticipant
+        .setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)
+        .catch((e) =>
+          setError(
+            e instanceof Error ? e.message : "Could not change microphone state.",
+          ),
+        );
+    }
+    window.addEventListener("keydown", handleMicrophoneShortcut);
+    return () =>
+      window.removeEventListener("keydown", handleMicrophoneShortcut);
+  }, [canSpeak, localParticipant]);
   const cameraOn = localParticipant.isCameraEnabled;
   const screenShareTrack = tracks.find(
     (track) =>
@@ -1080,6 +1191,47 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const stageIds = new Set(onStage.map((p) => p.identity));
   const listeners = activeParticipants.filter((p) => !stageIds.has(p.identity));
   const peopleCount = onStage.length + listeners.length;
+  const pinnedAnnouncements = snap.announcements.filter(
+    (announcement) => announcement.source_question_id === null,
+  );
+  const sharedMessages = snap.announcements.filter(
+    (announcement) => announcement.source_question_id !== null,
+  );
+  const activeAnnouncementIndex = Math.min(
+    announcementIndex,
+    pinnedAnnouncements.length - 1,
+  );
+  function beginAnnouncementSwipe(event) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (event.target.closest("button, a, input, textarea")) return;
+    announcementPointerStart.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function finishAnnouncementSwipe(event) {
+    const start = announcementPointerStart.current;
+    announcementPointerStart.current = null;
+    if (
+      !start ||
+      start.id !== event.pointerId ||
+      pinnedAnnouncements.length < 2
+    ) {
+      return;
+    }
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+      return;
+    }
+    setAnnouncementIndex((current) => {
+      const index = Math.min(current, pinnedAnnouncements.length - 1);
+      return (index + (deltaX < 0 ? 1 : -1) + pinnedAnnouncements.length) %
+        pinnedAnnouncements.length;
+    });
+  }
 
   const toggle = (fn) => () =>
     fn().catch((e) => setError(String(e.message ?? e)));
@@ -1181,6 +1333,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
       }
       setQuestionText("");
       setQuestionSent(true);
+      setTimeout( () => {
+        setAskOpen(false);
+      }, 2000);
     } catch (e) {
       setQuestionError(
         e instanceof Error ? e.message : "Could not save your message.",
@@ -1252,6 +1407,16 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     });
   }
 
+  function removeAnnouncement(announcementId) {
+    requestConfirmation({
+      title: "Remove this announcement?",
+      message: "It will no longer be visible to participants.",
+      confirmLabel: "Remove announcement",
+      onConfirm: () =>
+        act(() => api.deleteAnnouncement(code, join.session, announcementId)),
+    });
+  }
+
   async function createAnnouncement(event) {
     event.preventDefault();
     setAnnouncementBusy(true);
@@ -1268,10 +1433,6 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     } finally {
       setAnnouncementBusy(false);
     }
-  }
-
-  async function removeAnnouncement(announcementId) {
-    await act(() => api.deleteAnnouncement(code, join.session, announcementId));
   }
 
   async function editAnnouncement(announcementId, text) {
@@ -1523,15 +1684,71 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           </div>
         )}
 
-        {snap.announcements.map((announcement) => (
-          <PinnedAnnouncement
-            key={announcement.id}
-            announcement={announcement}
-            isHost={isHost}
-            onRemove={removeAnnouncement}
-            onSave={editAnnouncement}
-          />
-        ))}
+        {pinnedAnnouncements.length > 0 && (
+          <section
+            aria-label="Pinned announcements"
+            className="touch-pan-y select-none"
+            onPointerDown={beginAnnouncementSwipe}
+            onPointerUp={finishAnnouncementSwipe}
+            onPointerCancel={() => {
+              announcementPointerStart.current = null;
+            }}
+          >
+            <PinnedAnnouncement
+              key={pinnedAnnouncements[activeAnnouncementIndex].id}
+              announcement={pinnedAnnouncements[activeAnnouncementIndex]}
+              isHost={isHost}
+              onRemove={removeAnnouncement}
+              onSave={editAnnouncement}
+            />
+            {pinnedAnnouncements.length > 1 && (
+              <div
+                className="mt-2 flex items-center justify-center gap-2"
+                aria-label="Pinned announcement slides"
+              >
+                <button
+                  type="button"
+                  aria-label="Previous pinned announcement"
+                  onClick={() =>
+                    setAnnouncementIndex(
+                      (activeAnnouncementIndex - 1 + pinnedAnnouncements.length) %
+                        pinnedAnnouncements.length,
+                    )
+                  }
+                  className="grid h-7 w-7 place-items-center rounded-full bg-white text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50"
+                >
+                  ‹
+                </button>
+                {pinnedAnnouncements.map((announcement, index) => (
+                  <button
+                    key={announcement.id}
+                    type="button"
+                    aria-label={`Show pinned announcement ${index + 1}`}
+                    aria-current={index === activeAnnouncementIndex}
+                    onClick={() => setAnnouncementIndex(index)}
+                    className={`h-2 w-2 rounded-full ${
+                      index === activeAnnouncementIndex
+                        ? "bg-[#37688F]"
+                        : "bg-slate-300"
+                    }`}
+                  />
+                ))}
+                <button
+                  type="button"
+                  aria-label="Next pinned announcement"
+                  onClick={() =>
+                    setAnnouncementIndex(
+                      (activeAnnouncementIndex + 1) % pinnedAnnouncements.length,
+                    )
+                  }
+                  className="grid h-7 w-7 place-items-center rounded-full bg-white text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50"
+                >
+                  ›
+                </button>
+              </div>
+            )}
+          </section>
+        )}
 
         {hostNotice && (
           <p
@@ -1651,7 +1868,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         )}
 
         {/* Controls */}
-        <footer className="flex justify-end flex-row items-start gap-3">
+        <footer className="flex justify-end flex-wrap space-y-3 items-start gap-3">
           <div />
           <div className="flex flex-wrap items-start justify-center gap-3">
             <div className="relative">
@@ -1687,9 +1904,10 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             {!canSpeak &&
               (canJoinNow ? (
                 <Control
-                  label="Join the floor and turn on mic"
+                  label="Join the open floor and turn on mic"
                   tone="green"
                   onClick={joinFloor}
+                  busy={floorBusy}
                 >
                   <Icon name="mic" />
                 </Control>
@@ -1697,7 +1915,8 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 <Control
                   label="Lower hand"
                   tone="amber"
-                  onClick={() => act(() => api.lowerHand(code, join.session))}
+                  onClick={lowerHand}
+                  busy={floorBusy}
                 >
                   <Icon name="hand" />
                 </Control>
@@ -1705,7 +1924,8 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 <Control
                   label="Raise hand"
                   tone="dark"
-                  onClick={() => act(() => api.raiseHand(code, join.session))}
+                  onClick={raiseHand}
+                  busy={floorBusy}
                 >
                   <Icon name="hand" />
                 </Control>
@@ -1714,11 +1934,12 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             {canSpeak && (
               <>
                 <Control
-                  label={micOn ? "Mute mic" : "Turn on mic"}
+                  label={micOn ? "Mute mic (Alt+B)" : "Turn on mic (Alt+B)"}
                   tone={micOn ? "glass" : "dark"}
                   onClick={toggle(() =>
                     localParticipant.setMicrophoneEnabled(!micOn),
                   )}
+                  shortcut="Alt+B"
                 >
                   <Icon name={micOn ? "mic" : "micOff"} />
                 </Control>
@@ -1832,9 +2053,29 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             )}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto tabss">
           {tab === "people" ? (
             <div className="flex flex-col gap-3">
+              {sharedMessages.length > 0 && (
+                <section
+                  aria-label="Messages shared with everyone"
+                  className="flex flex-col gap-1.5"
+                >
+                  <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
+                    Shared with everyone ({sharedMessages.length})
+                  </h2>
+                  {sharedMessages.map((announcement) => (
+                    <PinnedAnnouncement
+                      key={announcement.id}
+                      announcement={announcement}
+                      isHost={isHost}
+                      onRemove={removeAnnouncement}
+                      onSave={editAnnouncement}
+                      label="Shared message"
+                    />
+                  ))}
+                </section>
+              )}
               <section aria-label="On the floor">
                 <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
                   Speakers ({onStage.length})
@@ -1867,9 +2108,19 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                               <SmallBtn
                                 label={`Remove ${p.name} from the floor`}
                                 onClick={() =>
-                                  act(() =>
-                                    api.release(code, join.session, p.identity),
-                                  )
+                                  requestConfirmation({
+                                    title: `Remove ${p.name} from the floor?`,
+                                    message: `${p.name} will no longer be able to speak unless they rejoin the floor.`,
+                                    confirmLabel: "Remove from floor",
+                                    onConfirm: () =>
+                                      act(() =>
+                                        api.release(
+                                          code,
+                                          join.session,
+                                          p.identity,
+                                        ),
+                                      ),
+                                  })
                                 }
                                 className="bg-[#FF3B30]/10 text-[#FF3B30]"
                               >
@@ -1961,9 +2212,19 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                             <SmallBtn
                               label={`Decline ${p.name}`}
                               onClick={() =>
-                                act(() =>
-                                  api.reject(code, join.session, p.identity),
-                                )
+                                requestConfirmation({
+                                  title: `Decline ${p.name}'s hand?`,
+                                  message: `${p.name} will be removed from the speaking queue.`,
+                                  confirmLabel: "Decline hand",
+                                  onConfirm: () =>
+                                    act(() =>
+                                      api.reject(
+                                        code,
+                                        join.session,
+                                        p.identity,
+                                      ),
+                                    ),
+                                })
                               }
                               className="bg-[#767680]/15 text-[#3A3A3C]"
                             >
@@ -2082,7 +2343,17 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                             <button
                               type="button"
                               onClick={() =>
-                                void moderateQuestion(question.id, "dismissed")
+                                requestConfirmation({
+                                  title: "Dismiss this message?",
+                                  message:
+                                    "The sender's message will be marked as dismissed.",
+                                  confirmLabel: "Dismiss message",
+                                  onConfirm: () =>
+                                    moderateQuestion(
+                                      question.id,
+                                      "dismissed",
+                                    ),
+                                })
                               }
                               className="rounded-lg bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-600"
                             >
@@ -2093,7 +2364,17 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                         {!isPublic && (
                           <button
                             type="button"
-                            onClick={() => void publishQuestion(question.id)}
+                            onClick={() =>
+                              requestConfirmation({
+                                title:
+                                  "Show this private message to everyone?",
+                                message:
+                                  "The message and the sender's chosen name (or Anonymous) will be visible to all participants.",
+                                confirmLabel: "Show to everyone",
+                                onConfirm: () =>
+                                  publishQuestion(question.id),
+                              })
+                            }
                             className="rounded-lg bg-[#EEF7FF] px-2 py-1.5 text-[10px] font-semibold text-[#37688F]"
                           >
                             Show to everyone
@@ -2118,7 +2399,17 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                         )}
                         <button
                           type="button"
-                          onClick={() => void blockQuestionSender(question.id)}
+                          onClick={() =>
+                            requestConfirmation({
+                              title:
+                                "Block this sender from asking questions?",
+                              message:
+                                "They will no longer be able to send questions or suggestions in this meeting.",
+                              confirmLabel: "Block sender",
+                              onConfirm: () =>
+                                blockQuestionSender(question.id),
+                            })
+                          }
                           className="ml-auto rounded-lg bg-red-50 px-2 py-1.5 text-[10px] font-semibold text-red-700"
                         >
                           Block sender
@@ -2132,6 +2423,57 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           )}
         </div>
       </aside>
+      {confirmation && (
+        <div
+          className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setConfirmation(null);
+            }
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="room-confirmation-title"
+            aria-describedby="room-confirmation-message"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setConfirmation(null);
+            }}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <h2
+              id="room-confirmation-title"
+              className="text-lg font-semibold text-slate-900"
+            >
+              {confirmation.title}
+            </h2>
+            <p
+              id="room-confirmation-message"
+              className="mt-2 text-sm leading-relaxed text-slate-600"
+            >
+              {confirmation.message}
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setConfirmation(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRequestedAction}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+              >
+                {confirmation.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {askOpen && !isHost && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4"
@@ -2312,7 +2654,15 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                         )}
                       <button
                         type="button"
-                        onClick={() => void deleteMyQuestion(question.id)}
+                        onClick={() =>
+                          requestConfirmation({
+                            title: "Delete this message?",
+                            message: "You will not be able to restore it.",
+                            confirmLabel: "Delete message",
+                            onConfirm: () =>
+                              deleteMyQuestion(question.id),
+                          })
+                        }
                         aria-label="Delete your message"
                         className="rounded-lg px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
                       >

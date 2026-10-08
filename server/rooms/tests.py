@@ -214,8 +214,8 @@ class RoomTests(TestCase):
         joined = self.join(room["code"], "Guest")
         self.assertEqual(joined.status_code, 200)
 
-    def test_free_spots_allow_self_promotion_and_host_only_actions(self):
-        code, host, (a, b) = self.setup_room(guests=2)
+    def test_open_floor_free_spots_allow_self_promotion_and_host_only_actions(self):
+        code, host, (a, b) = self.setup_room("open", guests=2)
         self.assertEqual(self.act(b, "floor/grant/", {"identity": a["identity"]}).status_code, 403)
         r = self.act(a, "hand/")
         self.assertEqual([p["identity"] for p in r.json()["speakers"]], [a["identity"]])
@@ -224,17 +224,25 @@ class RoomTests(TestCase):
         r = self.act(b, "hand/")
         self.assertEqual([p["identity"] for p in r.json()["speakers"]], [a["identity"], b["identity"]])
 
-    def test_queued_listener_can_take_free_spot_in_queue_order(self):
+    def test_host_approval_requires_host_grant_even_when_floor_is_free(self):
         code, host, (a, b) = self.setup_room("approval", guests=2)
         self.act(host, "settings/", {"speaker_limit": 1})
-        self.act(a, "hand/")
+        first_request = self.act(a, "hand/")
+        self.assertEqual(first_request.json()["speakers"], [])
+        self.assertEqual([p["identity"] for p in first_request.json()["queue"]], [a["identity"]])
+        self.act(host, "floor/grant/", {"identity": a["identity"]})
+
         queued = self.act(b, "hand/")
         self.assertEqual([p["identity"] for p in queued.json()["queue"]], [b["identity"]])
 
         self.act(a, "floor/release/", {"identity": a["identity"]})
         r = self.act(b, "hand/")
-        self.assertEqual([p["identity"] for p in r.json()["speakers"]], [b["identity"]])
-        self.assertEqual(r.json()["queue"], [])
+        self.assertEqual(r.json()["speakers"], [])
+        self.assertEqual([p["identity"] for p in r.json()["queue"]], [b["identity"]])
+
+        granted = self.act(host, "floor/grant/", {"identity": b["identity"]})
+        self.assertEqual([p["identity"] for p in granted.json()["speakers"]], [b["identity"]])
+        self.assertEqual(granted.json()["queue"], [])
 
     def test_speaker_cap_enforced(self):
         code, host, (a, b, c) = self.setup_room(guests=3)
@@ -345,7 +353,7 @@ class RoomTests(TestCase):
         self.assertEqual(again.status_code, 403)
 
     def test_rejoin_keeps_identity_and_queue_place(self):
-        code, host, _ = self.setup_room(guests=0)
+        code, host, _ = self.setup_room("open", guests=0)
         blocker = self.person(code, "Current speaker")
         self.act(host, "settings/", {"speaker_limit": 1})
         self.act(blocker, "hand/")

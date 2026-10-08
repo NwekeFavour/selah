@@ -35,6 +35,11 @@ That choice is locked for that participant for the meeting and is shared in the 
    (events: participant joined and participant left). This is how the server notices dropped connections.
 3. The webhook must be reachable from the internet; use a tunnel such as ngrok when testing locally.
 
+Screen sharing in production requires the frontend to run over HTTPS and the room snapshot's
+`LIVEKIT_URL` to use `wss://`. Set `VITE_API_URL` to the deployed API and include the exact frontend
+origin in `CORS_ALLOWED_ORIGINS`. If the frontend is embedded in an iframe, the embedding page must
+allow screen capture (for example, `allow="display-capture"`).
+
 ## API
 
 | Method and path | Who | What |
@@ -45,7 +50,7 @@ That choice is locked for that participant for the meeting and is shared in the 
 | GET `/api/rooms/:code/state/` | member | current snapshot |
 | POST `/api/rooms/:code/leave/` | member | mark this participant disconnected and broadcast the updated snapshot |
 | POST `/api/rooms/:code/end/` | host | end the meeting for everyone and disconnect all participants |
-| POST `/api/rooms/:code/hand/` | member | request the floor (speak now in an open room with a free spot, otherwise join the queue) |
+| POST `/api/rooms/:code/hand/` | member | request the floor (host approval always queues for host approval; open floor admits into an available spot or queues when full) |
 | POST `/api/rooms/:code/hand/lower/` | member | leave the queue |
 | POST `/api/rooms/:code/floor/grant/` | host | `{identity}` give someone the floor (409 if full) |
 | POST `/api/rooms/:code/floor/reject/` | host | `{identity}` decline a hand |
