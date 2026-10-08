@@ -8,9 +8,9 @@ Vite + React + TypeScript + Tailwind v4 + LiveKit.
 
 ## Routes
 - `/`        create a selah (host)
-- `/r/:code` join a selah (guest enters a name)
+- `/:code`   join a selah (guest enters a name)
 
-On Vercel, `vercel.json` rewrites room links to the Vite app entry point so shared `/r/:code` URLs load correctly when opened directly.
+On Vercel, `vercel.json` rewrites room links to the Vite app entry point so shared `/:code` URLs load correctly when opened directly. Legacy `/r/:code` links are also supported.
 
 ## Backend contract (Django, under VITE_API_URL)
 - POST `/rooms/`            {title} -> {code}; host access is set as an HttpOnly cookie

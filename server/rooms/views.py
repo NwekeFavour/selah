@@ -1,5 +1,6 @@
 import functools
 import csv
+import hmac
 import io
 import logging
 import secrets
@@ -11,12 +12,14 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from . import livekit, services
 from .models import Participant, Question
 from .serializers import (
     AnnouncementSerializer,
+    ClaimHostSerializer,
     CreateSerializer,
     IdentitySerializer,
     JoinSerializer,
@@ -29,6 +32,15 @@ from .services import RoomError
 
 log = logging.getLogger(__name__)
 ROOM_CREDENTIAL_COOKIE_AGE = 60 * 60 * 24 * 30
+
+
+class CreateThrottle(ScopedRateThrottle):
+    def allow_request(self, request, view):
+        service_key = request.headers.get("X-Service-Key", "")
+        configured_key = settings.SELAH_SERVICE_KEY
+        if service_key and configured_key and hmac.compare_digest(service_key, configured_key):
+            return True
+        return super().allow_request(request, view)
 
 
 def _room_cookie_name(kind, code):
@@ -85,6 +97,7 @@ def handled(fn):
 class CreateRoom(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [CreateThrottle]
     throttle_scope = "create"
 
     def post(self, request):
@@ -95,6 +108,25 @@ class CreateRoom(APIView):
             {"code": room.code, "host_key": host_key},
             status=status.HTTP_201_CREATED,
         )
+        _set_room_cookie(response, "host", room.code, host_key, ROOM_CREDENTIAL_COOKIE_AGE)
+        return response
+
+
+class ClaimHost(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_scope = "join"
+
+    @handled
+    def post(self, request, code):
+        data = ClaimHostSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        host_key = data.validated_data["host_key"]
+        origin = request.headers.get("Origin")
+        if origin and origin not in settings.CORS_ALLOWED_ORIGINS:
+            return Response({"detail": "Origin not allowed."}, status=status.HTTP_403_FORBIDDEN)
+        room = services.verify_host_key(code, host_key)
+        response = Response({"code": room.code})
         _set_room_cookie(response, "host", room.code, host_key, ROOM_CREDENTIAL_COOKIE_AGE)
         return response
 

@@ -21,7 +21,7 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
   const linkInput = useRef(null);
   const copyBtn = useRef(null);
 
-  const link = code ? `${window.location.origin}/r/${code}` : "";
+  const link = code ? `${window.location.origin}/${code}` : "";
 
   function close() {
     setShown(false);

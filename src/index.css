@@ -77,6 +77,26 @@
   background-color: #111a19 !important;
 }
 
+.room-theme[data-theme="dark"] .pinned-announcement {
+  background-color: #111a23 !important;
+  border-color: #29445a !important;
+}
+
+.room-theme[data-theme="dark"] .pinned-announcement [class~="text-[#37688F]"] {
+  color: #9ac7ed !important;
+}
+
+.room-theme[data-theme="dark"] .meeting-ending-dialog {
+  background-color: #171a20 !important;
+  border-color: #343943 !important;
+}
+
+.room-theme[data-theme="dark"] .meeting-ending-countdown {
+  background-color: #3a1e21 !important;
+  color: #fca5a5 !important;
+  --tw-ring-color: rgb(127 29 29 / 35%);
+}
+
 .room-theme[data-theme="dark"] [class~="bg-gradient-to-br"] {
   background-image: linear-gradient(to bottom right, #15181e, #0c0e12) !important;
 }

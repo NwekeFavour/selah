@@ -44,7 +44,8 @@ allow screen capture (for example, `allow="display-capture"`).
 
 | Method and path | Who | What |
 |---|---|---|
-| POST `/api/rooms/` | anyone | `{title?, mode?}` -> `{code, host_key}` |
+| POST `/api/rooms/` | anyone or trusted service | `{title?, mode?}` -> `{code, host_key}`; trusted services send `X-Service-Key` |
+| POST `/api/rooms/:code/claim-host/` | host with key | `{host_key}` -> `{code}` and sets an HttpOnly host cookie |
 | POST `/api/rooms/:code/join/` | anyone | `{display_name, guest_id, host_key?}` -> `{token, livekit_url, session, identity, snapshot}` |
 | GET `/api/rooms/:code/status/` | anyone | `{ended}` (also treats elapsed meetings as ended) |
 | GET `/api/rooms/:code/state/` | member | current snapshot |
@@ -60,6 +61,34 @@ allow screen capture (for example, `allow="display-capture"`).
 | POST `/api/livekit/webhook/` | LiveKit | signed connection events |
 
 Members send `Authorization: Bearer <session>`. Errors look like `{"detail": "..."}`.
+
+## Rekap integration
+
+Rekap's backend creates Selah rooms server-to-server so its organizers do not share the
+per-IP `create` limit. Set the same strong, private `SELAH_SERVICE_KEY` in both deployments.
+Rekap sends it only from its backend as `X-Service-Key`; never expose it in the browser.
+Requests without a valid service key still use the normal `20/hour` create throttle.
+
+Configure Rekap's backend with:
+
+- `SELAH_API_URL`: Selah API origin, for example `https://selah.example.com/api`
+- `SELAH_WEB_URL`: Selah frontend origin, for example `https://selah.example.com`
+- `SELAH_SERVICE_KEY`: the same secret configured on Selah
+
+For each event, Rekap should create the room by calling
+`POST {SELAH_API_URL}/rooms/` with `X-Service-Key: {SELAH_SERVICE_KEY}` and a JSON body
+such as `{"title":"Event title","mode":"approval"}`. Persist the returned `code` and
+`host_key` server-side, associated with the event. When an organizer starts the meeting,
+Rekap's authenticated `GET /events/:id/selah/host-link` endpoint should return a URL of
+the form `{SELAH_WEB_URL}/{code}#host={URL-encoded-host_key}`. Selah exchanges this
+fragment for an HttpOnly host cookie before enabling host controls, then removes the
+credential from the address bar. Return this host URL only to an authorized organizer;
+do not log or expose the host key in client-side API responses or analytics.
+
+The Rekap dashboard can show its **Start meeting** action when the event's
+`onlinePlatform` or `online_platform` is `selah`; opening the returned URL starts the
+host flow. In Selah production, include the Selah frontend origin in
+`CORS_ALLOWED_ORIGINS` and serve the frontend over HTTPS so the host cookie is secure.
 
 ## How it keeps the room honest
 

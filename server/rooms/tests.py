@@ -122,6 +122,43 @@ class RoomTests(TestCase):
         self.assertTrue(guest_cookie["httponly"])
         self.assertNotIn(guest_cookie.value, host.content.decode())
 
+    def test_claim_host_sets_cookie_without_joining_room(self):
+        room = self.create()
+        response = self.api.post(
+            f"/api/rooms/{room['code']}/claim-host/",
+            {"host_key": room["host_key"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"code": room["code"]})
+        cookie = response.cookies[f"selah_host_{room['code']}"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["path"], f"/api/rooms/{room['code']}/")
+        self.assertFalse(Participant.objects.filter(room__code=room["code"]).exists())
+
+    def test_claim_host_rejects_invalid_key(self):
+        room = self.create()
+        response = self.api.post(
+            f"/api/rooms/{room['code']}/claim-host/",
+            {"host_key": "not-the-host-key"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(SELAH_SERVICE_KEY="rekap-service-key")
+    def test_service_key_bypasses_create_ip_throttle(self):
+        client = APIClient()
+        for _ in range(21):
+            response = client.post(
+                "/api/rooms/",
+                {"title": "Panel"},
+                format="json",
+                HTTP_X_SERVICE_KEY="rekap-service-key",
+            )
+            self.assertEqual(response.status_code, 201)
+
     def test_host_can_join_with_tab_scoped_key_when_cookie_is_unavailable(self):
         room = self.create()
         response = APIClient().post(

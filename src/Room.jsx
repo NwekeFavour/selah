@@ -476,8 +476,8 @@ export default function Room({
           aria-labelledby="meeting-ended-title"
           aria-describedby="meeting-ended-description"
         >
-          <div className="w-full max-w-md rounded-3xl border border-white/40 bg-white/90 px-7 py-8 text-center shadow-2xl backdrop-blur-xl">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-4xl font-bold tabular-nums text-red-600 ring-8 ring-red-100/70">
+          <div className="meeting-ending-dialog w-full max-w-md rounded-3xl border border-white/40 bg-white/90 px-7 py-8 text-center shadow-2xl backdrop-blur-xl">
+            <div className="meeting-ending-countdown mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-4xl font-bold tabular-nums text-red-600 ring-8 ring-red-100/70">
               <span role="timer" aria-live="assertive">
                 {endingSeconds}
               </span>
@@ -568,7 +568,7 @@ function PinnedAnnouncement({
   const detailsId = `announcement-${announcement.id}`;
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-[#B9D7F1] bg-[#EEF7FF] px-4 py-3 text-[13px] text-slate-700">
+    <div className="pinned-announcement flex items-start gap-3 rounded-xl border border-[#B9D7F1] bg-[#EEF7FF] px-4 py-3 text-[13px] text-slate-700">
       <div className="min-w-0 flex-1">
         <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#37688F]">
           {label}

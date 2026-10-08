@@ -3,6 +3,10 @@
     {
       "source": "/r/:code",
       "destination": "/"
+    },
+    {
+      "source": "/:code([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)",
+      "destination": "/"
     }
   ]
 }

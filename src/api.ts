@@ -52,6 +52,8 @@ async function call<T>(
 export const api = {
   createRoom: (title: string, mode: Mode = "approval") =>
     call<{ code: string; host_key: string }>("/rooms/", { title, mode }),
+  claimHost: (code: string, host_key: string) =>
+    call<{ code: string }>(`/rooms/${code}/claim-host/`, { host_key }),
   join: (
     code: string,
     display_name: string,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import Room from "./Room";
 import Home from "./home";
@@ -7,7 +7,10 @@ import { Avatar, AvatarPicker } from "./avatar";
 import { avatarBg, avatarFromIdentity, getSavedAvatar, randomAvatar, saveAvatar } from "./avatarData";
 
 const codeFromUrl = () =>
-  window.location.pathname.match(/^\/r\/([\w-]+)/)?.[1] ?? null;
+  window.location.pathname.match(/^\/(?:r\/)?([a-z0-9]{3}-[a-z0-9]{3}-[a-z0-9]{3})\/?$/i)?.[1] ?? null;
+
+const hostKeyFromUrl = () =>
+  new URLSearchParams(window.location.hash.slice(1)).get("host");
 
 const joinedKey = (roomCode) => `selah.joined.${roomCode}`;
 const hostMeetingKey = (roomCode) => `selah.host.title.${roomCode}`;
@@ -54,10 +57,15 @@ export default function App() {
   const [waitingForHost, setWaitingForHost] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [claimingHost, setClaimingHost] = useState(() =>
+    Boolean(codeFromUrl() && hostKeyFromUrl()),
+  );
+  const hostClaimInFlight = useRef("");
 
   const goHome = useCallback(() => {
     window.history.pushState({}, "", "/");
     setCode(null);
+    setClaimingHost(false);
     setResuming(false);
     setWaitingForHost(false);
     setError("");
@@ -73,6 +81,7 @@ export default function App() {
     const onPop = () => {
       const nextCode = codeFromUrl();
       setCode(nextCode);
+      setClaimingHost(Boolean(nextCode && hostKeyFromUrl()));
       setResuming(Boolean(nextCode && sessionStorage.getItem(joinedKey(nextCode))));
       setJoined(null);
       setWaitingForHost(false);
@@ -82,9 +91,38 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  // Exchange Rekap's URL-fragment credential for a host cookie before rendering host controls.
+  useEffect(() => {
+    const hostKey = code ? hostKeyFromUrl() : null;
+    if (!code || !hostKey) return;
+
+    const claimId = `${code}:${hostKey}`;
+    if (hostClaimInFlight.current === claimId) return;
+    hostClaimInFlight.current = claimId;
+
+    api.claimHost(code, hostKey)
+      .then(() => {
+        if (codeFromUrl() !== code) return;
+        sessionStorage.setItem(`selah.host.key.${code}`, hostKey);
+        localStorage.setItem(hostMarkerKey(code), "1");
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      })
+      .catch((err) => {
+        if (codeFromUrl() === code) {
+          setError(err instanceof Error ? err.message : "Could not verify host access.");
+        }
+      })
+      .finally(() => {
+        if (hostClaimInFlight.current === claimId) {
+          hostClaimInFlight.current = "";
+        }
+        if (codeFromUrl() === code) setClaimingHost(false);
+      });
+  }, [code]);
+
   // A refresh loses React state, so reissue a LiveKit token for rooms joined in this tab.
   useEffect(() => {
-    if (!code || !sessionStorage.getItem(joinedKey(code))) return;
+    if (claimingHost || !code || !sessionStorage.getItem(joinedKey(code))) return;
     let active = true;
     const displayName = localStorage.getItem("selah.name") ?? "";
 
@@ -118,7 +156,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [code, handleMeetingEnded]);
+  }, [claimingHost, code, handleMeetingEnded]);
 
   // Guests wait here until the host opens the room; retry below the API rate limit.
   useEffect(() => {
@@ -166,8 +204,9 @@ export default function App() {
 
   // Called by the "Start a Selah" modal once the host has a meeting.
   function enter(roomCode) {
-    window.history.pushState({}, "", `/r/${roomCode}`);
+    window.history.pushState({}, "", `/${roomCode}`);
     setCode(roomCode);
+    setClaimingHost(false);
     setResuming(false);
     setWaitingForHost(false);
     setError("");
@@ -222,6 +261,14 @@ export default function App() {
         onDisconnected={() => setJoined(null)}
         onMeetingEnded={handleMeetingEnded}
       />
+    );
+  }
+
+  if (claimingHost) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-950 px-6 text-center text-white">
+        <p role="status">Verifying host access…</p>
+      </main>
     );
   }
 

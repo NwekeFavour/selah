@@ -228,6 +228,16 @@ def create_room(title, mode):
     return room, host_key
 
 
+def verify_host_key(code, host_key):
+    try:
+        room = Room.objects.get(code=code.lower())
+    except Room.DoesNotExist:
+        raise RoomError("Meeting not found.", 404)
+    if not host_key or not hmac.compare_digest(_hash(host_key), room.host_key_hash):
+        raise RoomError("Host key is not valid.", 403)
+    return room
+
+
 def _open_room(room, opened_at=None):
     room.opened_at = opened_at or timezone.now()
     room.ends_at = room.opened_at + timedelta(minutes=cfg("MEETING_MINUTES"))

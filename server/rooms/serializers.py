@@ -35,6 +35,10 @@ class JoinSerializer(serializers.Serializer):
         return value
 
 
+class ClaimHostSerializer(serializers.Serializer):
+    host_key = serializers.CharField(max_length=200)
+
+
 class IdentitySerializer(serializers.Serializer):
     identity = serializers.CharField(max_length=64)
 

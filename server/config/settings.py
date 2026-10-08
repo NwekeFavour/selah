@@ -17,6 +17,7 @@ DEBUG = env("DJANGO_DEBUG", "1") == "1"
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-only-insecure-key")
 if not DEBUG and SECRET_KEY == "dev-only-insecure-key":
     raise ImproperlyConfigured("Set DJANGO_SECRET_KEY when DJANGO_DEBUG is off.")
+SELAH_SERVICE_KEY = env("SELAH_SERVICE_KEY")
 
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 CORS_ALLOWED_ORIGINS = [o.strip() for o in env("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o.strip()]

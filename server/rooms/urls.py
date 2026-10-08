@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("rooms/", views.CreateRoom.as_view()),
+    path("rooms/<str:code>/claim-host/", views.ClaimHost.as_view()),
     path("rooms/<str:code>/join/", views.JoinRoom.as_view()),
     path("rooms/<str:code>/status/", views.RoomStatus.as_view()),
     path("rooms/<str:code>/state/", views.RoomState.as_view()),

@@ -813,7 +813,7 @@ export default function Home({ onStart, onEnter }) {
                         <input
                           readOnly
                           aria-label={`Invite link for ${title}`}
-                          value={`${window.location.origin}/r/${code}`}
+                          value={`${window.location.origin}/${code}`}
                           onFocus={(event) => event.target.select()}
                           className="mt-2 w-full truncate rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500 outline-none ring-[#6495c4]/30 transition focus:ring-2"
                         />
