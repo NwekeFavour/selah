@@ -193,6 +193,32 @@ function SmallBtn({ label, onClick, disabled, className = "", children }) {
   );
 }
 
+function InlineSpinner({ className = "h-3.5 w-3.5" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={`${className} animate-spin motion-reduce:animate-none`}
+      fill="none"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeOpacity="0.3"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function PersonAvatar({ p, className = "h-9 w-9" }) {
   return (
     <span
@@ -550,128 +576,182 @@ function PinnedAnnouncement({
   const [text, setText] = useState(announcement.text);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   const shouldCollapse = announcement.text.length > 180;
   let preview = announcement.text.slice(0, 180);
+
   if (shouldCollapse) {
     const lastWhitespace = Math.max(
       preview.lastIndexOf(" "),
       preview.lastIndexOf("\n"),
     );
-    if (lastWhitespace > 0) preview = preview.slice(0, lastWhitespace);
-    const partialUrl = [...announcement.text.matchAll(/https?:\/\/\S+/g)].find(
+
+    if (lastWhitespace > 0) {
+      preview = preview.slice(0, lastWhitespace);
+    }
+
+    const partialUrl = [
+      ...announcement.text.matchAll(/https?:\/\/\S+/g),
+    ].find(
       (match) =>
         match.index < preview.length &&
         match.index + match[0].length > preview.length,
     );
-    if (partialUrl) preview = preview.slice(0, partialUrl.index).trimEnd();
+
+    if (partialUrl) {
+      preview = preview.slice(0, partialUrl.index).trimEnd();
+    }
   }
+
   const detailsId = `announcement-${announcement.id}`;
+  const authorName = announcement.author || "Participant";
 
   return (
-    <div className="pinned-announcement flex items-start gap-3 rounded-xl border border-[#B9D7F1] bg-[#EEF7FF] px-4 py-3 text-[13px] text-slate-700">
-      <div className="min-w-0 flex-1">
-        <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#37688F]">
-          {label}
-        </p>
-        {editing ? (
-          <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setBusy(true);
-              setError("");
-              try {
-                await onSave(announcement.id, text);
-                setEditing(false);
-              } catch (e) {
-                setError(
-                  e instanceof Error
-                    ? e.message
-                    : "Could not edit announcement.",
-                );
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <textarea
-              aria-label="Edit announcement"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              maxLength={500}
-              rows={3}
-              className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-[#6495c4]"
-            />
-            {error && (
-              <p role="alert" className="mt-1 text-[11px] text-red-700">
-                {error}
-              </p>
-            )}
-            <div className="mt-2 flex gap-2">
-              <button
-                type="submit"
-                disabled={busy || !text.trim()}
-                className="rounded-lg bg-[#6495c4] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
-              >
-                {busy ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(false);
-                  setText(announcement.text);
-                  setError("");
-                }}
-                className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        ) : (
-          <>
-            <p id={detailsId} className="whitespace-pre-wrap break-words">
-              <strong>{announcement.author}: </strong>
-              <AnnouncementText text={expanded ? announcement.text : preview} />
-              {shouldCollapse && !expanded ? "…" : ""}
-            </p>
-            {shouldCollapse && (
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-controls={detailsId}
-                onClick={() => setExpanded((value) => !value)}
-                className="mt-1 font-semibold text-[#37688F] underline underline-offset-2"
-              >
-                {expanded ? "Read less" : "Read more"}
-              </button>
-            )}
-          </>
-        )}
-      </div>
-      {isHost && (
-        <div className="flex gap-1">
-          {!editing && (
-            <button
-              type="button"
-              onClick={() => {
-                setText(announcement.text);
-                setEditing(true);
-              }}
-              className="rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-600"
-            >
-              Edit
-            </button>
-          )}
-          <SmallBtn
-            label="Remove announcement"
-            onClick={() => onRemove(announcement.id)}
-            className="bg-white text-slate-600"
-          >
-            <Icon name="x" className="h-4 w-4" />
-          </SmallBtn>
+    <article className="group py-4">
+      <div className="flex items-start gap-3">
+        {/* Author avatar */}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600">
+          {authorName.charAt(0).toUpperCase()}
         </div>
-      )}
-    </div>
+
+        <div className="min-w-0 flex-1">
+          {/* Comment header */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-semibold text-slate-900">
+              {authorName}
+            </span>
+
+            <span className="text-xs text-slate-400">
+              shared a message
+            </span>
+
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+              {label}
+            </span>
+
+            {/* Host controls */}
+            {isHost && !editing && (
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setText(announcement.text);
+                    setEditing(true);
+                    setError("");
+                  }}
+                  aria-label="Edit shared message"
+                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <Icon name="pencil" className="h-4 w-4" />
+                </button>
+
+                <SmallBtn
+                  label="Remove announcement"
+                  onClick={() => onRemove(announcement.id)}
+                  className="bg-transparent text-slate-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Icon name="x" className="h-4 w-4" />
+                </SmallBtn>
+              </div>
+            )}
+          </div>
+
+          {/* Comment content */}
+          {editing ? (
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setBusy(true);
+                setError("");
+
+                try {
+                  await onSave(announcement.id, text);
+                  setEditing(false);
+                } catch (e) {
+                  setError(
+                    e instanceof Error
+                      ? e.message
+                      : "Could not edit announcement.",
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <textarea
+                aria-label="Edit shared message"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                maxLength={500}
+                rows={3}
+                className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none transition focus:border-[#d47a3e] focus:ring-2 focus:ring-[#d47a3e]/10"
+              />
+
+              {error && (
+                <p role="alert" className="mt-1 text-xs text-red-600">
+                  {error}
+                </p>
+              )}
+
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={busy || !text.trim()}
+                  className="rounded-lg bg-[#d47a3e] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#bd6832] disabled:opacity-50"
+                >
+                  {busy ? "Saving…" : "Save changes"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setText(announcement.text);
+                    setError("");
+                  }}
+                  className="rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div className="rounded-2xl rounded-tl-sm border border-slate-100 bg-slate-50 px-4 py-3">
+                <p
+                  id={detailsId}
+                  className="whitespace-pre-wrap break-words text-[13px] leading-6 text-slate-700"
+                >
+                  <AnnouncementText
+                    text={expanded ? announcement.text : preview}
+                  />
+                  {shouldCollapse && !expanded ? "…" : ""}
+                </p>
+
+                {shouldCollapse && (
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    onClick={() => setExpanded((value) => !value)}
+                    className="mt-2 text-xs font-semibold text-[#b96530] transition hover:text-[#8f4b25]"
+                  >
+                    {expanded ? "Show less" : "Read full message"}
+                  </button>
+                )}
+              </div>
+
+              {/* Subtle comment footer */}
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-[11px] text-slate-400">
+                  Shared with participants
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -714,7 +794,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const [leaving, setLeaving] = useState(false);
   const [ending, setEnding] = useState(false);
   const [floorBusy, setFloorBusy] = useState(false);
+  const [busyActions, setBusyActions] = useState({});
   const [confirmation, setConfirmation] = useState(null);
+  const [confirmationBusy, setConfirmationBusy] = useState(false);
   const [screenShareBusy, setScreenShareBusy] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [reactions, setReactions] = useState([]);
@@ -916,12 +998,22 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, join.session, applySnapshot]);
 
-  async function act(fn) {
+  async function act(fn, busyKey) {
+    if (busyKey && busyActions[busyKey]) return;
     setError("");
+    if (busyKey) {
+      setBusyActions((current) => ({ ...current, [busyKey]: true }));
+    }
     try {
-      applySnapshot(await fn());
+      const result = await fn();
+      if (result?.version !== undefined) applySnapshot(result);
+      return result;
     } catch (e) {
       fail(e);
+    } finally {
+      if (busyKey) {
+        setBusyActions((current) => ({ ...current, [busyKey]: false }));
+      }
     }
   }
 
@@ -974,15 +1066,22 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
     title,
     message,
     confirmLabel = "Confirm",
+    busyLabel = "Working…",
     onConfirm,
   }) {
-    setConfirmation({ title, message, confirmLabel, onConfirm });
+    setConfirmation({ title, message, confirmLabel, busyLabel, onConfirm });
   }
 
-  function confirmRequestedAction() {
+  async function confirmRequestedAction() {
     const onConfirm = confirmation?.onConfirm;
-    setConfirmation(null);
-    if (onConfirm) void onConfirm();
+    if (!onConfirm || confirmationBusy) return;
+    setConfirmationBusy(true);
+    try {
+      await onConfirm();
+      setConfirmation(null);
+    } finally {
+      setConfirmationBusy(false);
+    }
   }
 
   function leaveCall() {
@@ -1176,6 +1275,12 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const onStage = [snap.host, ...snap.speakers].filter(
     (person) => person.connected,
   );
+  const activeSpeakerCount = onStage.filter(
+    (person) => person.identity !== snap.host.identity,
+  ).length;
+  const showSpeakersTab = activeSpeakerCount > 3;
+  const selectedTab =
+    tab === "speakers" && !showSpeakersTab ? "people" : tab;
   const activeParticipants = snap.participants.filter(
     (person) => person.connected,
   );
@@ -1255,16 +1360,16 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           seenQuestionIds.current.add(question.id),
         );
         setQuestionInbox(questions);
-        if (tab === "questions") {
+        if (tab === "comments") {
           setQuestionUnread(0);
         } else if (!firstLoad && newQuestions.length) {
           setQuestionUnread((count) => count + newQuestions.length);
           const now = Date.now();
           if (now - lastQuestionToastAt.current >= 10_000) {
             toast.info(
-              `${newQuestions.length} new question${newQuestions.length === 1 ? "" : "s"}`,
+              `${newQuestions.length} new comments${newQuestions.length === 1 ? "" : "s"}`,
               {
-                description: "Open the Questions tab to review them.",
+                description: "Open the Comments tab to review them.",
               },
             );
             lastQuestionToastAt.current = now;
@@ -1273,7 +1378,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
       } catch (e) {
         if (active)
           setQuestionError(
-            e instanceof Error ? e.message : "Could not load questions.",
+            e instanceof Error ? e.message : "Could not load comments.",
           );
       }
     }
@@ -1460,17 +1565,17 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
   const tabBtn = (key, label, count, alert) => (
     <button
       type="button"
-      aria-pressed={tab === key}
+      aria-pressed={selectedTab === key}
       onClick={() => setTab(key)}
       className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl  py-2 text-[13px] font-semibold transition motion-reduce:transition-none ${
-        tab === key
+        selectedTab === key
           ? "bg-[#6495c4] text-[#fff]"
           : "text-slate-400 hover:text-slate-700"
       }`}
     >
       {label} ({count})
       {alert &&
-        (key === "questions" ? (
+        (key === "comments" ? (
           <span className="rounded-full bg-[#F59E0B] px-1.5 py-0.5 text-[10px] leading-none text-white">
             {questionUnread}
           </span>
@@ -1481,6 +1586,82 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           />
         ))}
     </button>
+  );
+
+  const renderSpeakerSection = () => (
+    <section aria-label="On the floor">
+      <div className="flex items-center justify-between gap-2 px-1 pb-1.5">
+        <h2 className="text-[12px] font-semibold text-slate-400">
+          Speakers ({onStage.length})
+        </h2>
+        {isHost && activeSpeakerCount > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              act(async () => {
+                await api.muteAllSpeakers(code, join.session);
+                toast.success("All speaker microphones are muted");
+              }, "mute-all-speakers")
+            }
+            disabled={Boolean(busyActions["mute-all-speakers"])}
+            aria-busy={Boolean(busyActions["mute-all-speakers"])}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            {busyActions["mute-all-speakers"] && <InlineSpinner />}
+            {busyActions["mute-all-speakers"] ? "Muting…" : "Mute all"}
+          </button>
+        )}
+      </div>
+      {onStage.length === 0 ? (
+        <p className="px-1 text-[13px] text-slate-400">
+          Nobody is on the floor yet.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {onStage.map((p) => {
+            const hostRow = p.identity === snap.host.identity;
+            return (
+              <PersonRow
+                key={p.identity}
+                p={p}
+                me={me}
+                sub={
+                  <MicStatus
+                    person={p}
+                    isHostRow={hostRow}
+                    tracks={tracks}
+                    participants={participants}
+                  />
+                }
+                subClass=""
+                right={
+                  isHost &&
+                  !hostRow && (
+                    <SmallBtn
+                      label={`Remove ${p.name} from the floor`}
+                      onClick={() =>
+                        requestConfirmation({
+                          title: `Remove ${p.name} from the floor?`,
+                          message: `${p.name} will no longer be able to speak unless they rejoin the floor.`,
+                          confirmLabel: "Remove from floor",
+                          onConfirm: () =>
+                            act(() =>
+                              api.release(code, join.session, p.identity),
+                            ),
+                        })
+                      }
+                      className="bg-[#FF3B30]/10 text-[#FF3B30]"
+                    >
+                      <Icon name="userMinus" className="h-4 w-4" />
+                    </SmallBtn>
+                  )
+                }
+              />
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 
   return (
@@ -1615,10 +1796,12 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                   key={key}
                   aria-pressed={snap.mode === key}
                   onClick={() =>
-                    act(() =>
-                      api.updateSettings(code, join.session, { mode: key }),
+                    act(
+                      () => api.updateSettings(code, join.session, { mode: key }),
+                      "room-settings",
                     )
                   }
+                  disabled={Boolean(busyActions["room-settings"])}
                   className={`rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold transition motion-reduce:transition-none ${
                     snap.mode === key
                       ? "bg-[#6495c4] text-[#fff] shadow-sm"
@@ -1634,12 +1817,15 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               <select
                 value={snap.max_speakers}
                 onChange={(e) =>
-                  act(() =>
-                    api.updateSettings(code, join.session, {
-                      speaker_limit: Number(e.target.value),
-                    }),
+                  act(
+                    () =>
+                      api.updateSettings(code, join.session, {
+                        speaker_limit: Number(e.target.value),
+                      }),
+                    "room-settings",
                   )
                 }
+                disabled={Boolean(busyActions["room-settings"])}
                 className="rounded-lg border border-[#E4E8EE] bg-white px-2 py-1 text-[12px] font-semibold text-slate-800 outline-none focus-visible:outline-2 focus-visible:outline-[#1F8F78]"
               >
                 {Array.from({ length: MAX_SPEAKERS }, (_, i) => i + 1).map(
@@ -1655,31 +1841,43 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               <input
                 type="checkbox"
                 checked={snap.questions_enabled}
+                disabled={Boolean(busyActions.questions_enabled)}
                 onChange={(e) =>
-                  act(() =>
-                    api.updateSettings(code, join.session, {
-                      questions_enabled: e.target.checked,
-                    }),
+                  act(
+                    () =>
+                      api.updateSettings(code, join.session, {
+                        questions_enabled: e.target.checked,
+                      }),
+                    "questions_enabled",
                   )
                 }
                 className="h-4 w-4 accent-[#6495c4]"
               />
               Questions on
+              {busyActions.questions_enabled && (
+                <InlineSpinner className="h-3.5 w-3.5 text-[#6495c4]" />
+              )}
             </label>
             <label className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
               <input
                 type="checkbox"
                 checked={snap.anonymous_questions_enabled}
+                disabled={Boolean(busyActions.anonymous_questions_enabled)}
                 onChange={(e) =>
-                  act(() =>
-                    api.updateSettings(code, join.session, {
-                      anonymous_questions_enabled: e.target.checked,
-                    }),
+                  act(
+                    () =>
+                      api.updateSettings(code, join.session, {
+                        anonymous_questions_enabled: e.target.checked,
+                      }),
+                    "anonymous_questions_enabled",
                   )
                 }
                 className="h-4 w-4 accent-[#6495c4]"
               />
               Allow anonymous
+              {busyActions.anonymous_questions_enabled && (
+                <InlineSpinner className="h-3.5 w-3.5 text-[#6495c4]" />
+              )}
             </label>
           </div>
         )}
@@ -1800,7 +1998,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               </div>
               {thumbs.length > 0 && (
                 <div className="absolute bottom-3 right-3 top-3 flex flex-col gap-2 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {thumbs.map((p) => (
+                  {thumbs.slice(0, 3).map((p) => (
                     <button
                       key={p.identity}
                       type="button"
@@ -1994,7 +2192,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 }}
                 className="rounded-xl bg-[#6495c4] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
               >
-                Ask the host
+                Comment
               </button>
             )}
             {!isHost && !snap.questions_enabled && (
@@ -2037,6 +2235,8 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           className="flex flex-wrap rounded-2xl bg-white shadow-sm"
         >
           {tabBtn("people", "People", peopleCount, false)}
+          {showSpeakersTab &&
+            tabBtn("speakers", "Speakers", activeSpeakerCount, false)}
           {tabBtn(
             "hands",
             "Hands",
@@ -2045,8 +2245,8 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
           )}
           {isHost &&
             tabBtn(
-              "questions",
-              "Questions",
+              "comments",
+              "Comments",
               questionInbox.filter((question) => question.status === "pending")
                 .length,
               questionUnread > 0,
@@ -2054,7 +2254,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto tabss">
-          {tab === "people" ? (
+          {selectedTab === "people" ? (
             <div className="flex flex-col gap-3">
               {sharedMessages.length > 0 && (
                 <section
@@ -2076,64 +2276,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                   ))}
                 </section>
               )}
-              <section aria-label="On the floor">
-                <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
-                  Speakers ({onStage.length})
-                </h2>
-                {onStage.length === 0 ? (
-                  <p className="px-1 text-[13px] text-slate-400">
-                    Nobody is on the floor yet.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {onStage.map((p) => {
-                      const hostRow = p.identity === snap.host.identity;
-                      return (
-                        <PersonRow
-                          key={p.identity}
-                          p={p}
-                          me={me}
-                          sub={
-                            <MicStatus
-                              person={p}
-                              isHostRow={hostRow}
-                              tracks={tracks}
-                              participants={participants}
-                            />
-                          }
-                          subClass=""
-                          right={
-                            isHost &&
-                            !hostRow && (
-                              <SmallBtn
-                                label={`Remove ${p.name} from the floor`}
-                                onClick={() =>
-                                  requestConfirmation({
-                                    title: `Remove ${p.name} from the floor?`,
-                                    message: `${p.name} will no longer be able to speak unless they rejoin the floor.`,
-                                    confirmLabel: "Remove from floor",
-                                    onConfirm: () =>
-                                      act(() =>
-                                        api.release(
-                                          code,
-                                          join.session,
-                                          p.identity,
-                                        ),
-                                      ),
-                                  })
-                                }
-                                className="bg-[#FF3B30]/10 text-[#FF3B30]"
-                              >
-                                <Icon name="userMinus" className="h-4 w-4" />
-                              </SmallBtn>
-                            )
-                          }
-                        />
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
+              {!showSpeakersTab && renderSpeakerSection()}
 
               <section aria-label="Listening">
                 <h2 className="px-1 pb-1.5 text-[12px] font-semibold text-slate-400">
@@ -2173,7 +2316,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                 )}
               </section>
             </div>
-          ) : tab === "hands" ? (
+          ) : selectedTab === "speakers" && showSpeakersTab ? (
+            renderSpeakerSection()
+          ) : selectedTab === "hands" ? (
             <section aria-label="Speaking queue">
               {activeQueue.length === 0 ? (
                 <p className="px-1 pt-1 text-[13px] text-slate-400">
@@ -2308,114 +2453,156 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                       announcement.source_question_id === question.id,
                   );
                   return (
-                    <article
-                      key={question.id}
-                      className="rounded-xl border border-slate-200 bg-white p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-600">
-                          Message
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(question.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-800">
-                        {question.text}
-                      </p>
-                      <p className="mt-2 text-[11px] font-medium text-slate-500">
-                        {question.anonymous ? "Anonymous" : question.author}
-                        {" · "}
-                        {question.status}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {question.status === "pending" && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void moderateQuestion(question.id, "answered")
-                              }
-                              className="rounded-lg bg-[#E3F3EE] px-2 py-1.5 text-[10px] font-semibold text-[#1F8F78]"
-                            >
-                              Mark answered
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                requestConfirmation({
-                                  title: "Dismiss this message?",
-                                  message:
-                                    "The sender's message will be marked as dismissed.",
-                                  confirmLabel: "Dismiss message",
-                                  onConfirm: () =>
-                                    moderateQuestion(
-                                      question.id,
-                                      "dismissed",
-                                    ),
-                                })
-                              }
-                              className="rounded-lg bg-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-600"
-                            >
-                              Dismiss
-                            </button>
-                          </>
-                        )}
-                        {!isPublic && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              requestConfirmation({
-                                title:
-                                  "Show this private message to everyone?",
-                                message:
-                                  "The message and the sender's chosen name (or Anonymous) will be visible to all participants.",
-                                confirmLabel: "Show to everyone",
-                                onConfirm: () =>
-                                  publishQuestion(question.id),
-                              })
-                            }
-                            className="rounded-lg bg-[#EEF7FF] px-2 py-1.5 text-[10px] font-semibold text-[#37688F]"
-                          >
-                            Show to everyone
-                          </button>
-                        )}
-                        {isPublic && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void act(() =>
-                                api.inviteQuestionSender(
-                                  code,
-                                  join.session,
-                                  question.id,
-                                ),
-                              )
-                            }
-                            className="rounded-lg bg-[#34C759]/15 px-2 py-1.5 text-[10px] font-semibold text-[#17813A]"
-                          >
-                            Invite to speak
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            requestConfirmation({
-                              title:
-                                "Block this sender from asking questions?",
-                              message:
-                                "They will no longer be able to send questions or suggestions in this meeting.",
-                              confirmLabel: "Block sender",
-                              onConfirm: () =>
-                                blockQuestionSender(question.id),
-                            })
-                          }
-                          className="ml-auto rounded-lg bg-red-50 px-2 py-1.5 text-[10px] font-semibold text-red-700"
-                        >
-                          Block sender
-                        </button>
-                      </div>
-                    </article>
+<article
+  key={question.id}
+  className="group relative border-b border-slate-100 py-5 last:border-b-0"
+>
+  <div className="flex gap-3.5">
+    {/* Avatar */}
+    <div className="relative flex h-10 w-10 ms-3 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700 ring-1 ring-slate-200/70">
+      {question.anonymous
+        ? "?"
+        : (question.author || "U").charAt(0).toUpperCase()}
+    </div>
+
+    {/* Comment content */}
+    <div className="min-w-0 flex-1">
+      {/* Author and timestamp */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-sm font-semibold text-slate-900">
+          {question.anonymous ? "Anonymous participant" : question.author}
+        </span>
+
+        <span className="text-xs text-slate-400">
+          ·
+        </span>
+
+        <span className="text-xs text-slate-500">
+          {new Date(question.created_at).toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </span>
+
+        {question.status === "pending" && (
+          <span className="ml-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Pending
+          </span>
+        )}
+
+        {question.status === "answered" && (
+          <span className="ml-1 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-100 text-[9px]">
+              ✓
+            </span>
+            Answered
+          </span>
+        )}
+
+        {question.status === "dismissed" && (
+          <span className="ml-1 text-[11px] font-medium text-slate-400">
+            Dismissed
+          </span>
+        )}
+      </div>
+
+      {/* Message */}
+      <p className="mt-2 whitespace-pre-wrap break-words text-[14px] leading-6 text-slate-700">
+        {question.text}
+      </p>
+
+      {/* Actions */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        {question.status === "pending" && (
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                void moderateQuestion(question.id, "answered")
+              }
+              className="text-xs font-semibold text-slate-600 transition hover:text-emerald-700"
+            >
+              Mark answered
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                requestConfirmation({
+                  title: "Dismiss this message?",
+                  message:
+                    "The sender's message will be marked as dismissed.",
+                  confirmLabel: "Dismiss message",
+                  onConfirm: () =>
+                    moderateQuestion(question.id, "dismissed"),
+                })
+              }
+              className="text-xs font-medium text-slate-400 transition hover:text-slate-700"
+            >
+              Dismiss
+            </button>
+          </>
+        )}
+
+        {!isPublic && (
+          <button
+            type="button"
+            onClick={() =>
+              requestConfirmation({
+                title: "Show this private message to everyone?",
+                message:
+                  "The message and the sender's chosen name (or Anonymous) will be visible to all participants.",
+                confirmLabel: "Show to everyone",
+                busyLabel: "Publishing…",
+                onConfirm: () => publishQuestion(question.id),
+              })
+            }
+            className="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800"
+          >
+            Publish to discussion
+          </button>
+        )}
+
+        {isPublic && (
+          <button
+            type="button"
+            onClick={() =>
+              void act(() =>
+                api.inviteQuestionSender(
+                  code,
+                  join.session,
+                  question.id,
+                ),
+              )
+            }
+            className="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800"
+          >
+            Invite to speak →
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() =>
+            requestConfirmation({
+              title: "Block this sender from commmenting",
+              message:
+                "They will no longer be able to send comments in this meeting.",
+              confirmLabel: "Block sender",
+              onConfirm: () => blockQuestionSender(question.id),
+            })
+          }
+          className="ml-auto text-xs text-slate-400 opacity-100 transition hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        >
+          Block sender
+        </button>
+      </div>
+    </div>
+  </div>
+</article>
                   );
                 })
               )}
@@ -2427,7 +2614,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
         <div
           className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !confirmationBusy) {
               setConfirmation(null);
             }
           }}
@@ -2438,7 +2625,9 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             aria-labelledby="room-confirmation-title"
             aria-describedby="room-confirmation-message"
             onKeyDown={(event) => {
-              if (event.key === "Escape") setConfirmation(null);
+              if (event.key === "Escape" && !confirmationBusy) {
+                setConfirmation(null);
+              }
             }}
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
           >
@@ -2458,17 +2647,26 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
               <button
                 type="button"
                 autoFocus
-                onClick={() => setConfirmation(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
+                onClick={() => !confirmationBusy && setConfirmation(null)}
+                disabled={confirmationBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmRequestedAction}
+                disabled={confirmationBusy}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
               >
-                {confirmation.confirmLabel}
+                {confirmationBusy ? (
+                  <span className="inline-flex items-center gap-2">
+                    <InlineSpinner />
+                    {confirmation.busyLabel}
+                  </span>
+                ) : (
+                  confirmation.confirmLabel
+                )}
               </button>
             </div>
           </section>
@@ -2485,7 +2683,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="ask-host-title"
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+            className="max-h-[90vh] asks w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -2493,7 +2691,7 @@ function Stage({ code, join, theme, onToggleTheme, onLeave, onMeetingEnded }) {
                   id="ask-host-title"
                   className="text-lg font-semibold text-slate-900"
                 >
-                  Ask the host
+                  Send Message to the Host
                 </h2>
                 <p className="mt-1 text-[12px] text-slate-500">
                   Only the host can read your messages.

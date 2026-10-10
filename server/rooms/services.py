@@ -424,6 +424,21 @@ def remove(code, actor_identity, target_identity):
         snap = _bump(room)
     return _flush(room, snap, fx)
 
+def mute_all_speakers(code, actor_identity):
+    with transaction.atomic():
+        room = _lock(code)
+        _require_host(_participant(room, actor_identity))
+        identities = list(
+            room.participants.filter(
+                role=SPEAKER, is_host=False, banned=False, connected=True
+            ).values_list("identity", flat=True)
+        )
+    try:
+        livekit.get_client().mute_speakers(room.code, identities)
+    except Exception as error:
+        raise RoomError("Could not mute speakers right now. Please try again.", 502) from error
+    return {"muted": len(identities)}
+
 
 def update_settings(
     code,

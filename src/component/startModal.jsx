@@ -11,7 +11,7 @@ const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled])";
 export default function StartModal({ open, onClose, onEnter, onMeetingCreated }) {
   const [shown, setShown] = useState(false);
   const [title, setTitle] = useState("");
-  const [mode, setMode] = useState("approval");
+  const [mode, setMode] = useState("open");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [code, setCode] = useState(null);
@@ -151,7 +151,7 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
               className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-[#6495c4] focus:ring-4 focus:ring-[#6495c4]/20"
             />
 
-            <fieldset className="mt-5">
+            {/* <fieldset className="mt-5">
               <legend className="text-sm font-medium">How should the floor work?</legend>
               <div className="mt-2 grid gap-3">
                 {MODES.map((m) => (
@@ -174,7 +174,7 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
                   </label>
                 ))}
               </div>
-            </fieldset>
+            </fieldset> */}
 
             {error && <p role="alert" className="mt-4 text-sm text-[#E5484D]">{error}</p>}
 

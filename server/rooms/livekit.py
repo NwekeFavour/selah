@@ -10,6 +10,7 @@ from datetime import timedelta
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from livekit import api
+from livekit.protocol.models import TrackType
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,39 @@ class LiveKit:
             async_to_sync(self._apply)(room_code, json.dumps(snapshot).encode(), permissions, remove)
         except Exception:
             log.exception("LiveKit update failed for room %s", room_code)
+
+    def mute_speakers(self, room_code, identities):
+        if not self.configured:
+            raise RuntimeError("LiveKit is not configured.")
+        try:
+            async_to_sync(self._mute_speakers)(room_code, identities)
+        except Exception:
+            log.exception("Could not mute speakers in room %s", room_code)
+            raise
+
+    async def _mute_speakers(self, room_code, identities):
+        lk = api.LiveKitAPI(settings.LIVEKIT_API_URL, settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
+        try:
+            response = await lk.room.list_participants(
+                api.ListParticipantsRequest(room=room_code)
+            )
+            identity_set = set(identities)
+            for participant in response.participants:
+                if participant.identity not in identity_set:
+                    continue
+                for track in participant.tracks:
+                    if track.type != TrackType.AUDIO:
+                        continue
+                    await lk.room.mute_published_track(
+                        api.MuteRoomTrackRequest(
+                            room=room_code,
+                            identity=participant.identity,
+                            track_sid=track.sid,
+                            muted=True,
+                        )
+                    )
+        finally:
+            await lk.aclose()
 
     async def _apply(self, room_code, payload, permissions, remove):
         lk = api.LiveKitAPI(settings.LIVEKIT_API_URL, settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)

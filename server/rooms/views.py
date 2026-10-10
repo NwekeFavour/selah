@@ -233,6 +233,12 @@ class Release(_TargetView):
     action = staticmethod(services.release)
 
 
+class MuteAllSpeakers(FloorView):
+    @handled
+    def post(self, request, code):
+        return Response(services.mute_all_speakers(code, request.user.identity))
+
+
 class Remove(_TargetView):
     action = staticmethod(services.remove)
 

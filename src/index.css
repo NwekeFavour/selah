@@ -59,7 +59,9 @@
   background-color: #171a20 !important;
 }
 
-.tabss{
+
+
+.tabss, .asks{
   scrollbar-width: none;
 }
 

@@ -77,6 +77,8 @@ export const api = {
     call<Snapshot>(`/rooms/${code}/floor/reject/`, { identity }, s),
   release: (code: string, s: string, identity: string) =>
     call<Snapshot>(`/rooms/${code}/floor/release/`, { identity }, s),
+  muteAllSpeakers: (code: string, s: string) =>
+    call<{ muted: number }>(`/rooms/${code}/floor/mute-all/`, {}, s),
   remove: (code: string, s: string, identity: string) =>
     call<Snapshot>(`/rooms/${code}/floor/remove/`, { identity }, s),
   updateSettings: (code: string, s: string, settings: {

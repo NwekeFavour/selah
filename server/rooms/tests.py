@@ -19,6 +19,7 @@ class FakeLiveKit:
     def __init__(self):
         self.calls = []
         self.deleted = []
+        self.muted = []
 
     def token(self, room_code, identity, name, can_publish, is_admin, ttl):
         return f"tok|{identity}|publish={can_publish}|admin={is_admin}"
@@ -28,6 +29,9 @@ class FakeLiveKit:
 
     def delete_room(self, code):
         self.deleted.append(code)
+
+    def mute_speakers(self, code, identities):
+        self.muted.append((code, list(identities)))
 
     def verify_webhook(self, body, auth):
         raise ValueError("bad signature")
@@ -380,6 +384,18 @@ class RoomTests(TestCase):
         self.act(host, "floor/grant/", {"identity": a["identity"]})
         self.assertEqual(self.act(b, "floor/release/", {"identity": a["identity"]}).status_code, 403)
         self.assertEqual(self.act(host, "floor/release/", {"identity": a["identity"]}).status_code, 200)
+
+    def test_only_host_can_mute_all_speakers(self):
+        code, host, (speaker, listener) = self.setup_room(guests=2)
+        self.act(host, "floor/grant/", {"identity": speaker["identity"]})
+
+        denied = self.act(listener, "floor/mute-all/")
+        response = self.act(host, "floor/mute-all/")
+
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"muted": 1})
+        self.assertEqual(self.lk.muted, [(code, [speaker["identity"]])])
 
     def test_remove_bans(self):
         code, host, (a,) = self.setup_room(guests=1)

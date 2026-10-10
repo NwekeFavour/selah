@@ -15,6 +15,7 @@ urlpatterns = [
     path("rooms/<str:code>/floor/grant/", views.Grant.as_view()),
     path("rooms/<str:code>/floor/reject/", views.Reject.as_view()),
     path("rooms/<str:code>/floor/release/", views.Release.as_view()),
+    path("rooms/<str:code>/floor/mute-all/", views.MuteAllSpeakers.as_view()),
     path("rooms/<str:code>/floor/remove/", views.Remove.as_view()),
     path("rooms/<str:code>/settings/", views.RoomSettings.as_view()),
     path("rooms/<str:code>/questions/", views.QuestionCollection.as_view()),

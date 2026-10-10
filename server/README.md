@@ -56,6 +56,7 @@ allow screen capture (for example, `allow="display-capture"`).
 | POST `/api/rooms/:code/floor/grant/` | host | `{identity}` give someone the floor (409 if full) |
 | POST `/api/rooms/:code/floor/reject/` | host | `{identity}` decline a hand |
 | POST `/api/rooms/:code/floor/release/` | host or that speaker | `{identity}` end a turn |
+| POST `/api/rooms/:code/floor/mute-all/` | host | mute published audio tracks for all connected speakers |
 | POST `/api/rooms/:code/floor/remove/` | host | `{identity}` remove and block from the meeting |
 | POST `/api/rooms/:code/settings/` | host | `{mode?, speaker_limit?}` change the mode or speaker limit mid-meeting |
 | POST `/api/livekit/webhook/` | LiveKit | signed connection events |
