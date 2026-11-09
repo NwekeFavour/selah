@@ -1,410 +1,100 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import Selah from "./assets/selah.webp";
 import StartModal from "./component/startModal";
 import { ApiError, api } from "./api";
+
 // Marketing numbers live here so they are easy to change once media costs are known.
 const LIMITS = { people: 100, speakers: 10, minutes: 60 };
 
+// ---- Content ----------------------------------------------------------------
+
 const PEOPLE = [
-  {
-    id: 1,
-    photo:
-      "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=900&q=90",
-    name: "Amara O.",
-    skin: "#8D5A3C",
-    hair: "#1f1a17",
-    shirt: "#F2683C",
-    tint: "#FDE2D6",
-  },
-  {
-    id: 2,
-    photo:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=900&q=90",
-    name: "Tunde A.",
-    skin: "#6B4129",
-    hair: "#111111",
-    shirt: "#8575E0",
-    tint: "#E6E1FA",
-  },
-  {
-    id: 3,
-    photo:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=90",
-    name: "Ngozi E.",
-    skin: "#A06A48",
-    hair: "#2b1d16",
-    shirt: "#2E9E8F",
-    tint: "#D5F0EB",
-  },
-  {
-    id: 4,
-    photo:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=90",
-    name: "Daniel K.",
-    skin: "#E0B08A",
-    hair: "#5a3a22",
-    shirt: "#F6C445",
-    tint: "#FCF1CC",
-  },
-  {
-    id: 5,
-    photo:
-      "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=900&q=90",
-    name: "Halima B.",
-    skin: "#C58B64",
-    hair: "#1a1a1a",
-    shirt: "#F4B5BD",
-    tint: "#FBE4E7",
-  },
-  {
-    id: 6,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
-
-  {
-    id: 7,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
-
-  {
-    id: 8,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
-
-  {
-    id: 9,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
-  {
-    id: 10,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
-  {
-    id: 11,
-    photo:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=90",
-    name: "Segun L.",
-    skin: "#7A4A31",
-    hair: "#0f0f0f",
-    shirt: "#334155",
-    tint: "#E2E8F0",
-  },
+  { id: 1, name: "Amara O.", photo: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=800&q=85" },
+  { id: 2, name: "Tunde A.", photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=85" },
+  { id: 3, name: "Ngozi E.", photo: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=85" },
+  { id: 4, name: "Daniel K.", photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=85" },
+  { id: 5, name: "Halima B.", photo: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=800&q=85" },
+  { id: 6, name: "Segun L.", photo: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=800&q=85" },
 ];
 
-const STEPS = [
-  ["Start a Selah", "Name it, choose how the floor works, and copy the link."],
-  ["Share the link", "Guests join with just a name."],
-  [
-    "Speak or raise a hand",
-    "In an open room with free spots, tap and speak. Otherwise your hand joins the queue.",
-  ],
-  [
-    "Take your turn",
-    "When a speaker finishes, the next hand in line gets the floor.",
-  ],
-];
+const CAP = 4; // speaker limit shown in the demo (the real maximum is LIMITS.speakers)
 
-const FEATURES = [
-  {
-    title: "The host steers",
-    body: "Give the floor, take it back, decline a request, mute or remove anyone.",
-    tint: "bg-[#FDE2D6]",
-    icon: "M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0 M16 4v4 M8 10v4 M18 16v4",
-  },
-  {
-    title: "Say \u201Ccan\u2019t hear\u201D once",
-    body: "One tap sends the signal. The host sees a count, not a dozen interruptions.",
-    tint: "bg-[#E6E1FA]",
-    icon: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z",
-  },
-  {
-    title: "Drop out, keep your place",
-    body: "If your network cuts out, you have a short window to return before your spot is released.",
-    tint: "bg-[#D5F0EB]",
-    icon: "M12 7v5l3 2 M21 12a9 9 0 1 1-3-6.7 M21 4v5h-5",
-  },
-];
-
-const PLANS = [
-  [
-    "Free",
-    "Available at launch",
-    [
-      `${LIMITS.people} people`,
-      `${LIMITS.speakers} speakers on the floor`,
-      `${LIMITS.minutes}-minute meetings`,
-      "Guests join without an account",
-    ],
-  ],
-  [
-    "Pro",
-    "Coming soon",
-    ["250 people", "25 speakers", "3-hour meetings", "Recording and history"],
-  ],
-  [
-    "Business",
-    "Coming soon",
-    ["500+ people", "Multiple moderators", "Your branding", "Admin dashboard"],
-  ],
-];
-
-// ---- Small pieces -----------------------------------------------------------
-
-function Avatar({ p, className = "" }) {
-  return (
-    <svg viewBox="0 0 100 100" className={className} aria-hidden="true">
-      <path d="M8 100c0-24 18-34 42-34s42 10 42 34Z" fill={p.shirt} />
-      <rect x="42" y="52" width="16" height="16" rx="6" fill={p.skin} />
-      <circle cx="50" cy="40" r="19" fill={p.skin} />
-      <path
-        d="M30 40c0-14 8-22 20-22s20 8 20 22c-5-8-12-12-20-12s-15 4-20 12Z"
-        fill={p.hair}
-      />
-      <circle cx="43" cy="42" r="1.8" fill="#1e293b" />
-      <circle cx="57" cy="42" r="1.8" fill="#1e293b" />
-      <path
-        d="M44 49q6 5 12 0"
-        stroke="#1e293b"
-        strokeWidth="1.8"
-        fill="none"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function Icon({ d, className = "h-5 w-5" }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={d} />
-    </svg>
-  );
-}
-
-const Sparkle = ({ className = "" }) => (
-  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-    <path
-      d="M12 1c.8 6.2 4.8 10.2 11 11-6.2.8-10.2 4.8-11 11-.8-6.2-4.8-10.2-11-11 6.2-.8 10.2-4.8 11-11Z"
-      fill="currentColor"
-    />
-  </svg>
-);
-
-const Wave = ({ fill, flip }) => (
-  <svg
-    viewBox="0 0 1440 80"
-    preserveAspectRatio="none"
-    className={`block h-10 w-full sm:h-16 ${flip ? "rotate-180" : ""}`}
-    aria-hidden="true"
-  >
-    <path
-      d="M0,40 C240,85 480,0 720,30 C960,60 1200,75 1440,20 L1440,80 L0,80 Z"
-      fill={fill}
-    />
-  </svg>
-);
-
-function useRotation(ms) {
-  const [order, setOrder] = useState(PEOPLE.map((p) => p.id));
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const t = setInterval(() => setOrder((o) => [...o.slice(1), o[0]]), ms);
-    return () => clearInterval(t);
-  }, [ms]);
-  return order;
-}
-
-const Bars = ({ className = "bg-white" }) => (
-  <span className="flex h-5 items-center gap-0.5" aria-hidden="true">
-    {["h-2", "h-5", "h-3", "h-4"].map((h, i) => (
-      <i
-        key={i}
-        className={`w-1 animate-pulse rounded ${h} ${className} motion-reduce:animate-none`}
-        style={{ animationDelay: `${i * 140}ms` }}
-      />
-    ))}
-  </span>
-);
-
-// ---- Hero art: chunky letters, the floor passes between them ----------------
-
-const TILES = [
-  {
-    k: "S",
-    bg: "bg-[#F2683C]",
-    shape: "rounded-[38%_62%_55%_45%/48%_42%_58%_52%]",
-    say: "Hello!",
-  },
-  {
-    k: "E",
-    bg: "bg-[#8575E0]",
-    shape: "rounded-[55%_45%_40%_60%/45%_55%_45%_55%]",
-    say: "My turn!",
-  },
-  { k: null, bg: "bg-[#FDE2D6]", shape: "rounded-full", say: "Thank you!" },
-  {
-    k: "L",
-    bg: "bg-[#F6C445]",
-    shape: "rounded-[45%_55%_60%_40%/55%_45%_55%_45%]",
-    say: "Next up",
-  },
-  {
-    k: "A",
-    bg: "bg-[#F4B5BD]",
-    shape: "rounded-[60%_40%_45%_55%/40%_60%_40%_60%]",
-    say: "Yeay!",
-  },
-  {
-    k: "H",
-    bg: "bg-[#6495c4]",
-    shape: "rounded-[42%_58%_52%_48%/58%_42%_58%_42%]",
-    say: "Hand up!",
-  },
-];
-
-function LetterBlocks() {
-  const [active, setActive] = useState(0);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const t = setInterval(() => setActive((a) => (a + 1) % TILES.length), 2000);
-    return () => clearInterval(t);
-  }, []);
-
-  return (
-    <div className="relative mx-auto grid w-full max-w-[25rem] grid-cols-3 gap-5 p-4 pt-8">
-      <Sparkle className="absolute -left-1 top-2 h-5 w-5 animate-pulse text-[#F6C445] motion-reduce:animate-none" />
-      <Sparkle className="absolute -right-1 bottom-6 h-4 w-4 animate-pulse text-[#8575E0] motion-reduce:animate-none" />
-      {TILES.map((t, i) => {
-        const on = i === active;
-        return (
-          <div key={i} className="relative">
-            <div
-              className={`grid aspect-square place-items-center overflow-hidden border-[3px] border-slate-900 text-6xl font-black text-slate-900 shadow-[4px_4px_0_0_#0f172a] transition duration-500 ease-out motion-reduce:transition-none ${t.bg} ${t.shape} ${
-                on
-                  ? `z-10 scale-110 ${i % 2 ? "rotate-3" : "-rotate-3"}`
-                  : "scale-100 rotate-0"
-              }`}
-            >
-              {t.k ?? (
-                <Avatar p={PEOPLE[0]} className="h-full w-full translate-y-2" />
-              )}
-            </div>
-            <span
-              aria-hidden="true"
-              className={`absolute -top-5 left-1/2 z-20 -translate-x-1/4 whitespace-nowrap rounded-2xl border-2 border-slate-900 bg-white px-3 py-1 text-sm font-bold transition duration-300 motion-reduce:transition-none ${
-                on ? "scale-100 opacity-100" : "scale-75 opacity-0"
-              }`}
-            >
-              {t.say}
-              <i className="absolute -bottom-[7px] left-4 h-3 w-3 rotate-45 border-b-2 border-r-2 border-slate-900 bg-white" />
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---- Product mock: a Selah room, with the queue moving ----------------------
-
-const DEMO_CAP = 6; // host-chosen speaker limit for the picture (the real maximum is LIMITS.speakers)
-const QUEUE_ROW = ["translate-y-0", "translate-y-16"];
-
-// Each frame is one moment: who is on the floor (s), who is waiting (q), and what just happened.
 const MODES = {
   approval: {
     label: "Host approval",
+    note: "The host decides who speaks next. Raised hands wait in order until the host gives the floor.",
     frames: [
-      {
-        s: [1, 2],
-        q: [],
-        say: "Two people are speaking. Everyone else is listening.",
-      },
+      { s: [1, 2], q: [], say: "Two people are speaking. Everyone else is listening." },
       { s: [1, 2], q: [3], say: "Ngozi raises her hand and joins the queue." },
-      {
-        s: [1, 2],
-        q: [3, 4],
-        say: "Daniel raises his hand too. Hands stay in order.",
-      },
+      { s: [1, 2], q: [3, 4], say: "Daniel raises his hand too. Hands stay in order." },
       { s: [1, 2, 3], q: [4], say: "The host gives Ngozi the floor." },
       { s: [2, 3], q: [4], say: "Amara finishes her turn." },
-      {
-        s: [2, 3, 4],
-        q: [],
-        say: "Daniel is next. Everyone who asked has had a turn.",
-      },
+      { s: [2, 3, 4], q: [], say: "Daniel is next. Everyone who asked has had a turn." },
     ],
   },
   open: {
     label: "Open floor",
-    note: "While the floor has open spots, anyone can speak without waiting for approval. When it is full, new hands wait in line.",
+    note: "While the floor has open spots, anyone can speak without approval. When it is full, new hands wait in line.",
     frames: [
       { s: [1, 2], q: [], say: "A normal call with two speakers." },
-      {
-        s: [1, 2, 3],
-        q: [],
-        say: "Ngozi joins the floor. No approval needed.",
-      },
-      {
-        s: [1, 2, 3, 4, 5, 6],
-        q: [],
-        say: `The floor fills up to the host's limit of ${DEMO_CAP}.`,
-      },
-      {
-        s: [1, 2, 3, 4, 5, 6],
-        q: [7],
-        say: "The floor is full, so a new hand waits in the queue.",
-      },
-      {
-        s: [2, 3, 4, 5, 6, 7],
-        q: [],
-        say: "A speaker finishes and the next hand takes their spot.",
-      },
+      { s: [1, 2, 3], q: [], say: "Ngozi joins the floor. No approval needed." },
+      { s: [1, 2, 3, 4], q: [], say: `The floor fills up to the host's limit of ${CAP}.` },
+      { s: [1, 2, 3, 4], q: [5], say: "The floor is full, so a new hand waits in the queue." },
+      { s: [2, 3, 4, 5], q: [], say: "A speaker finishes and the next hand takes their spot." },
     ],
   },
 };
 
+const STEPS = [
+  ["Start a video meeting", "Name your Selah and copy the invite link. Nothing to download."],
+  ["Share the link", "Guests join with just a name. No account, no sign-up."],
+  ["Raise a hand or join the floor", "With free speaker spots, tap and speak. Otherwise your hand joins the queue."],
+  ["Speak in turn", "When a speaker finishes, the next raised hand in line gets the floor."],
+];
+
+const FEATURES = [
+  ["The host controls the floor", "Give the floor, take it back, decline a request, or mute and remove anyone in the room.", "M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0 M16 4v4 M8 10v4 M18 16v4"],
+  ["Say “can’t hear” once", "One tap sends the signal. The host sees a single count instead of a dozen interruptions.", "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"],
+  ["Drop out, keep your place", "If your network cuts out, you have a short window to rejoin before your spot is released.", "M12 7v5l3 2 M21 12a9 9 0 1 1-3-6.7 M21 4v5h-5"],
+  ["Guests join with a link", "Share one link. People enter their name and join. No account needed.", "M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7 M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"],
+];
+
+const USE_CASES = [
+  ["Town halls and all-hands", "Members or staff raise a hand and ask in order, without everyone talking at once.", "#F2683C"],
+  ["Online classes and lectures", "Students raise a hand, the teacher gives the floor, and the class stays orderly.", "#8575E0"],
+  ["Panel discussions and Q&A", "Keep a panel on the floor and take audience questions one voice at a time.", "#2E9E8F"],
+  ["Community and faith group calls", "Host large community, association or fellowship calls where every voice gets a turn.", "#F6C445"],
+];
+
+const PLANS = [
+  ["Free", "Available at launch", [`${LIMITS.people} people`, `${LIMITS.speakers} speakers`, `${LIMITS.minutes}-minute meetings`, "Raise-hand queue"]],
+  ["Pro", "Coming soon", ["250 people", "25 speakers", "3-hour meetings", "Recording and history"]],
+  ["Business", "Coming soon", ["500+ people", "Multiple moderators", "Your branding", "Admin dashboard"]],
+];
+
+const FAQS = [
+  ["What is Selah?", "Selah is a moderated video conferencing app for large groups. Up to 10 people speak at a time, everyone else listens, and a raise-hand speaking queue decides who talks next."],
+  ["How does the raise-hand queue work?", "Tap Raise hand and you join an ordered queue. In host-approval mode, the host gives you the floor. In open-floor mode, you can speak straight away while there are free speaker spots, and once the floor is full, new hands wait in line."],
+  ["How many people can join a free meeting?", `A free meeting supports up to ${LIMITS.people} people, with up to ${LIMITS.speakers} speakers on the floor, for ${LIMITS.minutes} minutes. Pro and Business plans with larger rooms are coming soon.`],
+  ["Do guests need an account?", "No. Guests join with a link and a name, with no sign-up and no download."],
+  ["What can the host control?", "The host can give the floor, take it back, decline a request, and mute or remove anyone. The host also sees a count when people report they can't hear."],
+  ["What if someone's connection drops?", "They have a short window to return before their spot is released, so a brief network drop does not cost them their place."],
+];
+
 const COMPANY = { name: "OKNOWN", url: "" };
 const HOST_MEETING_PREFIX = "selah.host.title.";
+
+const FOOTER_LINKS = [
+  ["Speaking queue", "#demo"],
+  ["How it works", "#how"],
+  ["Host controls", "#features"],
+  ["Use cases", "#use-cases"],
+  ["Plans", "#plans"],
+  ["FAQ", "#faq"],
+];
+
+// ---- Saved host meetings (localStorage) -------------------------------------
 
 function removeSavedHostMeeting(code) {
   localStorage.removeItem(`selah.host.${code}`);
@@ -419,34 +109,47 @@ function savedHostMeetings() {
     if (!key?.startsWith(HOST_MEETING_PREFIX)) continue;
     const code = key.slice(HOST_MEETING_PREFIX.length);
     if (!/^[a-z2-9]{3}(?:-[a-z2-9]{3}){2}$/.test(code)) continue;
-    meetings.push({
-      code,
-      title: localStorage.getItem(key) || `Selah ${code}`,
-    });
+    meetings.push({ code, title: localStorage.getItem(key) || `Selah ${code}` });
   }
   return meetings.sort((a, b) => a.title.localeCompare(b.title));
 }
 
-const FOOTER_LINKS = [
-  [
-    "Product",
-    [
-      ["How it works", "#how"],
-      ["The room", "#product"],
-      ["Plans", "#plans"],
-    ],
-  ],
-  [
-    "Legal",
-    [
-      ["Privacy policy", "#"],
-      ["Terms of use", "#"],
-    ],
-  ],
-];
+// ---- Small pieces -----------------------------------------------------------
 
-function useFrame(count, ms, still) {
-  const [f, setF] = useState(still);
+function Icon({ d, className = "h-5 w-5" }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function Reveal({ children, delay = 0, className = "" }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.5, delay, ease: "easeOut" }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function Eyebrow({ children }) {
+  return <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6495c4]">{children}</p>;
+}
+
+function Photo({ p, className = "" }) {
+  const [bad, setBad] = useState(false);
+  if (bad) return <span className={`grid place-items-center bg-slate-700 font-bold text-slate-300 ${className}`}>{p.name[0]}</span>;
+  return <img src={p.photo} alt="" loading="lazy" decoding="async" onError={() => setBad(true)} className={`object-cover object-[50%_20%] ${className}`} />;
+}
+
+function useFrame(count, ms) {
+  const [f, setF] = useState(2);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     setF(0);
@@ -456,51 +159,192 @@ function useFrame(count, ms, still) {
   return f;
 }
 
-// Real photo with an initial as fallback if the image fails to load.
-function Photo({ p, className = "", focus = "object-top" }) {
-  const [bad, setBad] = useState(false);
-  if (bad)
-    return (
-      <span
-        className={`grid place-items-center bg-slate-200 font-bold text-slate-500 ${className}`}
-      >
-        {p.name[0]}
-      </span>
-    );
+// ---- Section 2: live room demo ----------------------------------------------
+
+const ICON_MIC = "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z M19 10v2a7 7 0 0 1-14 0v-2 M12 19v3";
+const ICON_CAM = "m16 13 5 3.5V7.5L16 11 M3 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z";
+const ICON_HAND = "M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.4L3.4 16a2 2 0 0 1 3.2-2.4L8 15";
+const AUDIENCE = ["#F2683C", "#8575E0", "#2E9E8F", "#F6C445", "#F4B5BD"];
+
+function SpeakingBars() {
   return (
-    <img
-      src={p.photo}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      onError={() => setBad(true)}
-      className={`object-cover ${focus} ${className}`}
-    />
+    <span className="flex h-3.5 items-center gap-0.5" aria-hidden="true">
+      {["h-1.5", "h-3.5", "h-2.5", "h-3"].map((h, i) => (
+        <i key={i} className={`w-0.5 animate-pulse rounded bg-emerald-400 ${h} motion-reduce:animate-none`} style={{ animationDelay: `${i * 140}ms` }} />
+      ))}
+    </span>
   );
 }
 
-function MeetingMock() {
+function Room({ mode }) {
+  const { label, note, frames } = MODES[mode];
+  const f = useFrame(frames.length, 2800);
+  const { s: speakers, q: queue, say } = frames[f];
+  const full = speakers.length >= CAP;
+  const talkingId = speakers[f % speakers.length];
+  const featured = PEOPLE.find((p) => p.id === talkingId);
+  const others = speakers.filter((id) => id !== talkingId).map((id) => PEOPLE.find((p) => p.id === id));
+
+  return (
+    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_40px_90px_-40px_rgba(15,23,42,0.35)]">
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 px-5 py-3.5 text-sm">
+        <span className="relative flex h-2 w-2" aria-hidden="true">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        </span>
+        <span className="font-semibold">Panel Q&amp;A</span>
+        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">{label}</span>
+        <span className="ml-auto flex items-center gap-2.5 text-xs text-slate-500">
+          <span className="flex gap-1" aria-hidden="true">
+            {Array.from({ length: CAP }).map((_, i) => (
+              <i key={i} className={`h-1.5 w-5 rounded-full transition-colors duration-500 motion-reduce:transition-none ${i < speakers.length ? "bg-emerald-500" : "bg-slate-200"}`} />
+            ))}
+          </span>
+          {speakers.length} of {CAP} on the floor
+        </span>
+      </div>
+
+      <div className="grid lg:grid-cols-[1fr_320px]">
+        {/* Stage */}
+        <div className="bg-slate-100/70 p-4">
+          <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900" role="img" aria-label="The active speaker in a Selah video meeting">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={featured.id}
+                initial={{ opacity: 0, scale: 1.04 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45 }}
+                className="absolute inset-0"
+              >
+                <Photo p={featured} className="h-full w-full" />
+                <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
+              </motion.div>
+            </AnimatePresence>
+
+            <span className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
+              <SpeakingBars />
+              {featured.name}
+            </span>
+            <span className="absolute right-3 top-3 flex items-center gap-2 rounded-full bg-black/55 py-1 pl-1.5 pr-3 text-xs font-medium text-white backdrop-blur">
+              <span className="flex -space-x-1.5" aria-hidden="true">
+                {AUDIENCE.slice(0, 3).map((c) => (
+                  <i key={c} className="h-4 w-4 rounded-full ring-2 ring-slate-900" style={{ background: c }} />
+                ))}
+              </span>
+              46 listening
+            </span>
+
+            {/* Control dock */}
+            <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2" aria-hidden="true">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white backdrop-blur"><Icon d={ICON_MIC} className="h-[18px] w-[18px]" /></span>
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white backdrop-blur"><Icon d={ICON_CAM} className="h-[18px] w-[18px]" /></span>
+              <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors duration-500 motion-reduce:transition-none ${mode === "open" && !full ? "bg-emerald-500 text-white" : "bg-white text-slate-900"}`}>
+                <Icon d={ICON_HAND} className="h-4 w-4" />
+                {mode === "open" && !full ? "Join the floor" : "Raise hand"}
+              </span>
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#E5484D] text-white"><Icon d="M5 12h14" className="h-[18px] w-[18px]" /></span>
+            </div>
+          </div>
+
+          {/* Other speakers + open spots */}
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            {Array.from({ length: CAP - 1 }).map((_, i) => {
+              const p = others[i];
+              return p ? (
+                <motion.div key={p.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="relative aspect-video overflow-hidden rounded-xl bg-slate-200">
+                  <Photo p={p} className="h-full w-full" />
+                  <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">{p.name}</span>
+                </motion.div>
+              ) : (
+                <div key={`open-${i}`} className="grid aspect-video place-items-center rounded-xl border border-dashed border-slate-300 text-xs text-slate-400">
+                  Open spot
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Caption */}
+          <div className="mt-4 flex min-h-6 items-center justify-center text-center text-sm text-slate-600">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p key={say} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
+                {say}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Queue */}
+        <aside className="flex flex-col border-t border-slate-200 p-5 lg:border-l lg:border-t-0">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <Icon d={ICON_HAND} className="h-4 w-4 text-[#F2683C]" />
+              Speaking queue
+            </h3>
+            <span className="grid h-6 min-w-6 place-items-center rounded-full bg-slate-900 px-1.5 text-xs font-semibold text-white">{queue.length}</span>
+          </div>
+
+          <div className="relative min-h-[132px] flex-1" aria-hidden="true">
+            <AnimatePresence mode="popLayout" initial={false}>
+              {queue.length === 0 && (
+                <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-sm text-slate-500">
+                  {mode === "open" ? "No one is waiting. Free spots can be taken straight away." : "No hands raised yet."}
+                </motion.p>
+              )}
+              {queue.map((id, q) => {
+                const p = PEOPLE.find((x) => x.id === id);
+                const first = q === 0;
+                return (
+                  <motion.div
+                    key={id}
+                    layout
+                    initial={{ opacity: 0, x: 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -16 }}
+                    transition={{ duration: 0.35 }}
+                    className={`mb-2 rounded-xl border p-3 ${first ? "border-[#6495c4]/40 bg-[#6495c4]/[0.07]" : "border-slate-200 bg-white"}`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${first ? "bg-[#6495c4] text-white" : "bg-slate-100 text-slate-500"}`}>{q + 1}</span>
+                      <Photo p={p} className="h-8 w-8 shrink-0 rounded-full" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                      {first && mode === "open" && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Up next</span>}
+                    </div>
+                    {first && mode === "approval" && (
+                      <div className="mt-3 flex gap-2">
+                        <span className="flex-1 rounded-lg bg-slate-900 py-1.5 text-center text-xs font-semibold text-white">Give floor</span>
+                        <span className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600">Decline</span>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+
+          <p className="mt-4 border-t border-slate-100 pt-4 text-xs leading-relaxed text-slate-500">{note}</p>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function RoomDemo() {
   const [mode, setMode] = useState("approval");
   return (
     <div>
-      <div
-        role="tablist"
-        aria-label="How a room runs"
-        className="mx-auto mb-6 flex w-fit rounded-full bg-slate-100 p-1"
-      >
+      <div role="tablist" aria-label="How a room runs" className="mx-auto mb-6 flex w-fit rounded-full border border-slate-200 bg-white p-1 shadow-sm">
         {Object.entries(MODES).map(([key, m]) => (
           <button
             key={key}
             role="tab"
             aria-selected={mode === key}
             onClick={() => setMode(key)}
-            className={`rounded-full px-5 py-2 text-sm font-semibold transition duration-200 motion-reduce:transition-none ${
-              mode === key
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
+            className="relative rounded-full px-5 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-[#6495c4]"
           >
-            {m.label}
+            {mode === key && <motion.span layoutId="mode-pill" className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+            <span className={`relative ${mode === key ? "text-white" : "text-slate-600"}`}>{m.label}</span>
           </button>
         ))}
       </div>
@@ -509,169 +353,24 @@ function MeetingMock() {
   );
 }
 
-function Room({ mode }) {
-  const { label, note, frames } = MODES[mode];
-  const f = useFrame(frames.length, 2800, 2);
-  const { s: speakers, q: queue, say } = frames[f];
-  const full = speakers.length >= DEMO_CAP;
-  const talking = speakers[f % speakers.length];
-
-  return (
-    <div className="mx-auto max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)]">
-      <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3.5 text-sm">
-        <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2E9E8F] opacity-60 motion-reduce:animate-none" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2E9E8F]" />
-        </span>
-        <span className="font-semibold">Panel Q&amp;A</span>{" "}
-        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-          {label}
-        </span>
-        <span className="ml-auto hidden items-center gap-3 text-slate-500 sm:flex">
-          {speakers.length} of {DEMO_CAP} on the floor · 46 listening
-          <span className="flex gap-0.5" aria-hidden="true">
-            {Array.from({ length: DEMO_CAP }).map((_, i) => (
-              <i
-                key={i}
-                className={`h-1.5 w-3 rounded-full transition-colors duration-500 motion-reduce:transition-none ${i < speakers.length ? "bg-[#2E9E8F]" : "bg-slate-200"}`}
-              />
-            ))}
-          </span>
-        </span>
-      </div>
-
-      <div className="grid lg:grid-cols-[1fr_320px]">
-        <div className="p-5">
-          <div
-            className="grid grid-cols-3 gap-3"
-            role="img"
-            aria-label="Speakers on the floor, with open spots until the floor is full"
-          >
-            {Array.from({ length: DEMO_CAP }).map((_, slot) => (
-              <div key={slot} className="relative aspect-[4/3]">
-                <span className="absolute inset-0 grid place-items-center rounded-2xl border-2 border-dashed border-slate-200 text-xs text-slate-400">
-                  Open spot
-                </span>
-                {PEOPLE.filter((p) => (p.id - 1) % DEMO_CAP === slot).map(
-                  (p) => {
-                    const on = speakers.includes(p.id);
-                    return (
-                      <div
-                        key={p.id}
-                        className={`absolute inset-0 overflow-hidden rounded-2xl bg-slate-200 transition-all duration-700 motion-reduce:transition-none ${
-                          on ? "scale-100 opacity-100" : "scale-95 opacity-0"
-                        } ${on && p.id === talking ? "ring-[3px] ring-[#2E9E8F]" : "ring-0 ring-transparent"}`}
-                      >
-                        <Photo
-                          p={p}
-                          focus="object-[50%_20%]"
-                          className="h-full w-full"
-                        />
-                        <span className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-900 backdrop-blur">
-                          {p.id === talking && (
-                            <Bars className="bg-[#2E9E8F]" />
-                          )}
-                          {p.name}
-                        </span>
-                      </div>
-                    );
-                  },
-                )}
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 flex min-h-6 items-center justify-center gap-2 text-center text-sm text-slate-600">
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2E9E8F]"
-              aria-hidden="true"
-            />
-            {say}
-          </p>
-
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-700">
-              <Icon d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z M19 10v2a7 7 0 0 1-14 0v-2 M12 19v3" />
-            </span>
-            <span className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-700">
-              <Icon d="m16 13 5 3.5V7.5L16 11 M3 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z" />
-            </span>
-            <span
-              className={`rounded-full px-6 py-3 text-sm font-semibold text-white transition-colors duration-500 motion-reduce:transition-none ${mode === "open" && !full ? "bg-[#2E9E8F]" : "bg-slate-900"}`}
-            >
-              {mode === "open" && !full ? "Join the floor" : "Raise hand"}
-            </span>
-            <span className="grid h-11 w-11 place-items-center rounded-full bg-[#E5484D] text-white">
-              <Icon d="M5 12h14" />
-            </span>
-          </div>
-        </div>
-
-        <aside className="border-t border-slate-100 p-5 lg:border-l lg:border-t-0">
-          <div className="mb-4 flex items-center justify-between text-sm">
-            <h3 className="font-semibold">Waiting to speak</h3>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-              {queue.length}
-            </span>
-          </div>
-          <div className="relative h-[120px]" aria-hidden="true">
-            <p
-              className={`absolute inset-x-0 top-0 rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500 transition-opacity duration-500 motion-reduce:transition-none ${queue.length ? "opacity-0" : "opacity-100"}`}
-            >
-              {mode === "open"
-                ? "No one is waiting. Free spots can be taken straight away."
-                : "No hands raised yet."}
-            </p>
-            {PEOPLE.map((p) => {
-              const q = queue.indexOf(p.id);
-              return (
-                <div
-                  key={p.id}
-                  className={`absolute inset-x-0 top-0 flex h-14 items-center gap-2 rounded-xl bg-slate-50 px-3 transition-all duration-500 ease-in-out motion-reduce:transition-none ${
-                    q < 0
-                      ? "-translate-y-3 opacity-0"
-                      : `${QUEUE_ROW[q]} opacity-100`
-                  }`}
-                >
-                  <Photo p={p} className="h-9 w-9 shrink-0 rounded-full" />
-                  <span className="flex-1 truncate text-sm font-medium">
-                    {p.name}
-                  </span>
-                  {mode === "approval" && q === 0 ? (
-                    <>
-                      <span className="rounded-md bg-[#6495c4] px-2 py-1 text-xs text-white">
-                        Give floor
-                      </span>
-                      <span className="rounded-md border border-slate-300 px-2 py-1 text-xs">
-                        Decline
-                      </span>
-                    </>
-                  ) : q === 0 ? (
-                    <span className="rounded-full bg-[#D5F0EB] px-2.5 py-0.5 text-xs font-semibold text-[#1f7a6d]">
-                      Up next
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400">#{q + 1}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-xs leading-relaxed text-slate-500">{note}</p>
-        </aside>
-      </div>
-    </div>
-  );
-}
 // ---- Page -------------------------------------------------------------------
 
 export default function Home({ onStart, onEnter }) {
   const [open, setOpen] = useState(false);
   const [meetings, setMeetings] = useState(savedHostMeetings);
-  const [meetingStatuses, setMeetingStatuses] = useState({});
-  const dark =
-    "inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#2E9E8F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E9E8F] motion-reduce:transition-none";
+  const [statuses, setStatuses] = useState({});
+  const [copied, setCopied] = useState("");
   const refreshMeetings = () => setMeetings(savedHostMeetings());
+
+  const copyLink = async (code) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/${code}`);
+      setCopied(code);
+      setTimeout(() => setCopied(""), 1800);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
 
   useEffect(() => {
     if (!meetings.length) return undefined;
@@ -692,411 +391,272 @@ export default function Home({ onStart, onEnter }) {
       }),
     ).then((results) => {
       if (!active) return;
-      setMeetingStatuses((current) => ({
-        ...current,
-        ...Object.fromEntries(results),
-      }));
-      if (results.some(([, status]) => status === "ended")) {
-        setMeetings(savedHostMeetings());
-      }
+      setStatuses((cur) => ({ ...cur, ...Object.fromEntries(results) }));
+      if (results.some(([, s]) => s === "ended")) setMeetings(savedHostMeetings());
     });
-
     return () => {
       active = false;
     };
   }, [meetings]);
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQS.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  };
+
+  const darkBtn =
+    "inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-[#6495c4] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 motion-reduce:transition-none";
+
   return (
-    <div className="min-h-screen scroll-smooth bg-white text-slate-900 antialiased">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <a
-          href="#top"
-          className="flex items-center gap-2 text-lg font-bold tracking-tight"
-        >
-          <img src={Selah} alt="Selah" className="w-25" />
-        </a>
-        <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
-          <a href="#product" className="transition hover:text-slate-900">
-            Product
-          </a>
-          <a href="#how" className="transition hover:text-slate-900">
-            How it works
-          </a>
-          <a href="#plans" className="transition hover:text-slate-900">
-            Plans
-          </a>
-        </nav>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setOpen(true)}
-            className="px-4 py-2 text-sm text-slate-100 font-semibold transition bg-[#6495c4] hover:text-white"
-          >
-            Start a Selah
-          </button>
-        </div>
-      </header>
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen scroll-smooth bg-[#FAFAF7] text-slate-900 antialiased">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
 
-      {meetings.length > 0 && (
-        <section
-          aria-label="Your saved meetings"
-          className="mx-auto max-w-6xl px-6 pb-8"
-        >
-          <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm sm:p-7">
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6495c4]">
-                  Host dashboard
-                </p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
-                   Your saved meetings
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Your active rooms and their invite links, all in one place.
-                </p>
-              </div>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                {meetings.length} {meetings.length === 1 ? "meeting" : "meetings"}
-              </span>
-            </div>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {meetings.map(({ code, title }) => {
-                const status = meetingStatuses[code] ?? "checking";
-                return (
-                  <li
-                    key={code}
-                    className="group rounded-2xl border border-slate-200 bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#6495c4]/40 hover:shadow-md motion-reduce:transition-none"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#6495c4]/10 text-[#6495c4]">
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          aria-hidden="true"
-                        >
-                          <rect x="3" y="5" width="18" height="14" rx="3" />
-                          <path d="M8 10h8M8 14h4" />
-                        </svg>
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
-                            {title}
-                          </p>
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                              status === "active"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : status === "unavailable"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                status === "active"
-                                  ? "bg-emerald-500"
-                                  : status === "unavailable"
-                                    ? "bg-amber-500"
-                                    : "bg-slate-400"
-                              }`}
-                            />
-                            {status === "active"
-                              ? "Active"
-                              : status === "unavailable"
-                                ? "Status unavailable"
-                                : "Checking"}
-                          </span>
-                        </div>
-                        <input
-                          readOnly
-                          aria-label={`Invite link for ${title}`}
-                          value={`${window.location.origin}/${code}`}
-                          onFocus={(event) => event.target.select()}
-                          className="mt-2 w-full truncate rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500 outline-none ring-[#6495c4]/30 transition focus:ring-2"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                      <span className="text-xs text-slate-400">
-                        Select the link to copy
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onEnter(code)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#6495c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6495c4]"
-                      >
-                        Enter Meeting
-                        <svg
-                          viewBox="0 0 16 16"
-                          className="h-3.5 w-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          aria-hidden="true"
-                        >
-                          <path d="M3 8h9M8 4l4 4-4 4" />
-                        </svg>
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+        {/* Header */}
+        <header className="sticky top-0 z-40 bg-[#FAFAF7]/85 backdrop-blur-md">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+            <a href="#top"><img src={Selah} alt="Selah" className="w-20" /></a>
+            <nav aria-label="Main" className="hidden items-center gap-7 text-sm text-slate-600 md:flex">
+              <a href="#demo" className="transition hover:text-slate-900">Speaking queue</a>
+              <a href="#how" className="transition hover:text-slate-900">How it works</a>
+              <a href="#use-cases" className="transition hover:text-slate-900">Use cases</a>
+              <a href="#faq" className="transition hover:text-slate-900">FAQ</a>
+            </nav>
+            <button onClick={() => setOpen(true)} className="rounded-full bg-[#6495c4] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#5486b5] active:scale-[0.98]">
+              Start a Selah
+            </button>
           </div>
-        </section>
-      )}
+        </header>
 
-      <main id="top">
-        <section className="mx-auto grid max-w-6xl lg:items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[0.7fr_1fr] md:items-start md:grid-cols-2 lg:pt-16">
-          <div>
-            <h1 className="text-[40px]! sm:text-[42px]! text-start font-bold! leading-[1.1] text-black tracking-tight md:text-[45px]! lg:text-[65px]!">
-              Big meetings, <span className="text-[#6495c4]">one voice</span> at
-              a time
-              <Sparkle className="ml-2 inline h-6 w-6 text-slate-900" />
-            </h1>
-            <p className="mt-6 text-justify max-w-md leading-relaxed text-slate-600">
-              Hold town halls, classes and community calls where people raise a
-              hand, join the queue, and speak when the host calls them.
-            </p>
-            <div className="my-4 flex flex-wrap items-center gap-5">
-              <button onClick={() =>setOpen(true)} className={dark}>
-                <Icon
-                  d="m16 13 5 3.5V7.5L16 11 M3 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
-                  className="h-4 w-4"
-                />
-                Start a Selah
-              </button>
-              <a
-                href="#product"
-                className="group flex items-center gap-3 text-sm font-semibold"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-[#6495c4] text-white transition duration-200 group-hover:scale-105 motion-reduce:transition-none">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4 fill-current"
-                    aria-hidden="true"
-                  >
-                    <path d="M8 5v14l11-7Z" />
-                  </svg>
-                </span>
-                See it in action
-              </a>
-            </div>
-            <p className="text-sm text-start text-slate-500">
-              Guests join with a link and a name. Free meetings run up to{" "}
-              {LIMITS.minutes} minutes.
-            </p>
-          </div>
-          <LetterBlocks />
-        </section>
-
-        <Wave fill="#EEF2F7" />
-        <section className="bg-[#EEF2F7]">
-          <div className="mx-auto grid max-w-6xl gap-8 px-6 py-10 md:grid-cols-[1fr_auto_1.2fr] md:items-center">
-            <h2 className="text-3xl text-black font-semibold leading-tight tracking-tight">
-              Ready to host your next big meeting?
-            </h2>
-            <span className="hidden h-24 w-px bg-slate-300 md:block" />
-            <div>
-              <p className="leading-relaxed text-slate-600">
-                Selah keeps large groups orderly. Up to {LIMITS.speakers} people
-                speak at once, everyone else listens, and the host decides who
-                is next.
-              </p>
-              <a
-                href="#how"
-                className="mt-3 inline-block text-sm font-semibold text-[#6495c4] underline decoration-[#6495c4]/40 underline-offset-4 transition hover:decoration-[#6495c4]"
-              >
-                Learn more
-              </a>
-            </div>
-          </div>
-        </section>
-        <Wave fill="#EEF2F7" flip />
-
-        <section id="product" className="mx-auto max-w-6xl px-6 pb-20 pt-4">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl text-black font-semibold tracking-tight sm:text-4xl">
-              <svg
-                viewBox="0 0 40 24"
-                className="mr-3 inline h-6 w-9 text-[#6495c4]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <circle cx="9" cy="8" r="1" />
-                <circle cx="25" cy="8" r="1" />
-                <path d="M5 15q10 9 24 0" />
-              </svg>
-              A room built for turn-taking
-            </h2>
-            <div className="mx-auto mt-3 max-w-md">
-              <p className=" text-center mt-3 text-slate-600">
-                Watch the queue move: each person takes the floor, finishes, and
-                the next hand goes up.
-              </p>
-            </div>
-          </div>
-          <MeetingMock />
-        </section>
-
-        <section id="how" className="mx-auto max-w-6xl px-6 pb-20">
-          <ol className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map(([t, b], i) => (
-              <li key={t} className="flex gap-4">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#6495c4] text-sm font-bold text-white">
-                  {i + 1}
-                </span>
-                <div>
-                  <h3 className="font-semibold">{t}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{b}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="mx-auto grid max-w-6xl gap-10 px-6 pb-24 md:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="group text-center">
-              <span
-                className={`relative mx-auto grid h-16 w-16 place-items-center rounded-2xl transition duration-300 group-hover:-rotate-6 motion-reduce:transition-none ${f.tint}`}
-              >
-                <Icon d={f.icon} className="h-7 w-7 text-slate-900" />
-              </span>
-              <h3 className="mt-5 font-semibold">{f.title}</h3>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-slate-600">
-                {f.body}
-              </p>
-            </div>
-          ))}
-        </section>
-
-        <section id="plans" className="mx-auto max-w-6xl px-6 pb-24">
-          <h2 className="text-center text-black text-3xl font-semibold tracking-tight">
-            Start free. Grow when your room does.
-          </h2>
-          <div className="mt-10 grid divide-slate-200 md:grid-cols-3 md:divide-x">
-            {PLANS.map(([name, note, items], i) => (
-              <div
-                key={name}
-                className={`px-8 py-4 ${i === 0 ? "" : "text-slate-500"}`}
-              >
-                <h3
-                  className={`text-xl font-semibold ${i === 0 ? "text-slate-900" : ""}`}
-                >
-                  {name}
-                </h3>
-                <p
-                  className={`text-sm ${i === 0 ? "font-semibold text-[#6495c4]" : ""}`}
-                >
-                  {note}
-                </p>
-                <ul className="mt-4 space-y-2 text-sm">
-                  {items.map((it) => (
-                    <li key={it} className="flex gap-2">
-                      <span
-                        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${i === 0 ? "bg-[#6495c4]" : "bg-slate-300"}`}
-                      />
-                      {it}
-                    </li>
-                  ))}
+        <main id="top">
+          {/* Saved meetings: compact bar, only when the host has meetings */}
+          {meetings.length > 0 && (
+            <section aria-label="Your saved meetings" className="mx-auto max-w-6xl px-6 pt-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Your meetings</p>
+                <ul className="divide-y divide-slate-100">
+                  <AnimatePresence>
+                    {meetings.map(({ code, title }) => {
+                      const status = statuses[code] ?? "checking";
+                      const dot = status === "active" ? "bg-emerald-500" : status === "unavailable" ? "bg-amber-500" : "bg-slate-300";
+                      return (
+                        <motion.li key={code} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center gap-3 px-2 py-2.5">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} title={status} />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
+                          <button type="button" onClick={() => copyLink(code)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                            {copied === code ? "Copied" : "Copy link"}
+                          </button>
+                          <button type="button" onClick={() => onEnter(code)} className="rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#6495c4]">
+                            Enter meeting
+                          </button>
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
                 </ul>
               </div>
-            ))}
-          </div>
-        </section>
-      </main>
+            </section>
+          )}
 
-      <Wave fill="#EEF2F7" />
-      <footer className="bg-[#EEF2F7] px-6 pb-8 pt-6 text-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-          <h2 className="max-w-md  text-black text-3xl font-semibold tracking-tight">
-            Give your next meeting some order.
-          </h2>
-          <a
-            onClick={() => setOpen(true)} 
-            className="group flex items-center gap-3 text-sm text-[#8fb8d8] font-semibold"
-          >
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-[#6495c4] text-white transition duration-200 group-hover:scale-105 motion-reduce:transition-none">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4 fill-current"
-                aria-hidden="true"
-              >
-                <path d="M8 5v14l11-7Z" />
-              </svg>
-            </span>
-            Start a Selah
-          </a>
-        </div>
+          {/* 1. Hero */}
+          <section className="mx-auto max-w-4xl px-6 pb-20 pt-16 text-center sm:pt-24">
+            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }}>
+              <Eyebrow>Moderated video meetings</Eyebrow>
+              <h1 className="mt-5 text-balance text-4xl font-bold leading-[1.06] tracking-tight sm:text-6xl">
+                Video meetings for large groups, <span className="font-serif italic font-semibold text-[#6495c4]">one voice</span> at a time
+              </h1>
+              <p className="mx-auto mt-6  text-balance text-base leading-relaxed text-slate-600 sm:text-lg">
+                Selah is a video conferencing app with a raise-hand speaking queue. Run town halls, online classes, panel discussions and community calls where the host controls the floor and everyone gets a turn.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <button onClick={() => setOpen(true)} className={darkBtn}>Start a free meeting</button>
+                <a href="#demo" className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold transition hover:bg-white">
+                  See the speaking queue
+                </a>
+              </div>
+            </motion.div>
 
-        <div className="mx-auto mt-14 grid max-w-6xl gap-10 border-t border-[#8fb8d8] pt-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
-          <div>
-            <a
-              href="#top"
-              className="flex justify-center mb-4 w-fit rounded-full items-center gap-2 text-lg font-bold tracking-tight"
-            >
-              <img src={Selah} alt="Selah" className="w-25" />
-            </a>
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-900">
-              Video meetings for large groups, with a speaking queue so every
-              voice gets a turn.
-            </p>
-          </div>
-          {FOOTER_LINKS.map(([heading, links]) => (
-            <nav key={heading} aria-label={heading}>
-              <h3 className="text-sm text-[#6495c4] font-semibold">
-                {heading}
-              </h3>
-              <ul className="mt-4 space-y-3 text-sm text-slate-400">
-                {links.map(([label, href]) => (
-                  <li key={label}>
-                    <a
-                      href={href}
-                      className="transition text-black hover:text-white"
-                    >
-                      {label}
-                    </a>
+            <dl className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-slate-200">
+              {[[LIMITS.people, "people per meeting"], [LIMITS.speakers, "speakers at once"], [LIMITS.minutes, "minutes, free"]].map(([n, l]) => (
+                <div key={l} className="px-4">
+                  <dt className="text-3xl font-bold tracking-tight sm:text-4xl">{n}</dt>
+                  <dd className="mt-1 text-xs text-slate-500 sm:text-sm">{l}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-6 text-sm text-slate-500">Guests join with a link and a name. No account needed.</p>
+          </section>
+
+          {/* 2. Live room demo */}
+          <section id="demo" className="mx-auto max-w-5xl scroll-mt-20 px-6 pb-28">
+            <Reveal className="mb-10 text-center">
+              <Eyebrow>Raise-hand speaking queue</Eyebrow>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">A speaking queue built for large video calls</h2>
+              <p className="mx-auto mt-3  text-slate-600">
+                Participants raise a hand and wait in line. The host gives the floor, or lets people speak freely while speaker spots are open.
+              </p>
+            </Reveal>
+            <RoomDemo />
+          </section>
+
+          {/* 3. How it works */}
+          <section id="how" className="mx-auto max-w-6xl scroll-mt-20 px-6 pb-28">
+            <Reveal className="mb-12 text-center">
+              <Eyebrow>How it works</Eyebrow>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Run a moderated video meeting in four steps</h2>
+            </Reveal>
+            <ol className="relative grid gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+              <span aria-hidden="true" className="absolute left-0 right-0 top-5 hidden h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent lg:block" />
+              {STEPS.map(([t, b], i) => (
+                <Reveal key={t} delay={i * 0.08}>
+                  <li className="relative">
+                    <span className="relative grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white ring-8 ring-[#FAFAF7]">{i + 1}</span>
+                    <h3 className="mt-5 font-semibold tracking-tight">{t}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{b}</p>
                   </li>
+                </Reveal>
+              ))}
+            </ol>
+          </section>
+
+          {/* 4. Host controls and features */}
+          <section id="features" className="scroll-mt-20 bg-white py-28">
+            <div className="mx-auto grid max-w-6xl gap-14 px-6 lg:grid-cols-[0.8fr_1.2fr]">
+              <Reveal className="lg:sticky lg:top-28 lg:self-start">
+                <Eyebrow>Host controls</Eyebrow>
+                <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Orderly group meetings, without the chaos</h2>
+                <p className="mt-4 max-w-md text-slate-600">
+                  Up to {LIMITS.speakers} people speak at once, everyone else listens, and the host decides who is next.
+                </p>
+              </Reveal>
+              <ul className="grid gap-x-8 gap-y-10 sm:grid-cols-2">
+                {FEATURES.map(([t, b, d], i) => (
+                  <Reveal key={t} delay={i * 0.06}>
+                    <li>
+                      <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#6495c4]/10 text-[#6495c4]">
+                        <Icon d={d} />
+                      </span>
+                      <h3 className="mt-4 font-semibold tracking-tight">{t}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600">{b}</p>
+                    </li>
+                  </Reveal>
                 ))}
               </ul>
-            </nav>
-          ))}
-        </div>
+            </div>
+          </section>
 
-        <div className="mx-auto mt-12 flex max-w-6xl flex-col justify-between gap-2 border-t border-[#8fb8d8] pt-6 text-sm text-slate-400 sm:flex-row">
-          <span>
-            &copy; {new Date().getFullYear()} Selah. All rights reserved.
-          </span>
-          <span>
-            A product of{" "}
-            {COMPANY.url ? (
-              <a
-                href={COMPANY.url}
-                className="font-semibold text-white underline decoration-slate-600 underline-offset-4 transition hover:decoration-white"
-              >
-                {COMPANY.name}
-              </a>
-            ) : (
-              <span className="font-semibold text-[#6495c4]">
-                {COMPANY.name}
-              </span>
-            )}
-          </span>
-        </div>
-      </footer>
-      <StartModal
-        open={open}
-        onClose={() => setOpen(false)}
-        onEnter={onEnter}
-        onMeetingCreated={refreshMeetings}
-      />
-    </div>
+          {/* 5. Use cases */}
+          <section id="use-cases" className="mx-auto max-w-6xl scroll-mt-20 px-6 py-28">
+            <Reveal className="mb-12 text-center">
+              <Eyebrow>Use cases</Eyebrow>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Made for meetings where everyone talks at once</h2>
+              <p className="mx-auto mt-3 text-slate-600">If your video call has too many people and too few turns, a moderated speaking queue fixes it.</p>
+            </Reveal>
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {USE_CASES.map(([t, b, c], i) => (
+                <Reveal key={t} delay={i * 0.07}>
+                  <li className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:shadow-lg motion-reduce:transition-none">
+                    <span className="block h-1.5" style={{ background: c }} />
+                    <div className="p-5">
+                      <h3 className="font-semibold tracking-tight">{t}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600">{b}</p>
+                    </div>
+                  </li>
+                </Reveal>
+              ))}
+            </ul>
+          </section>
+
+          {/* 6. Plans strip */}
+          <section id="plans" className="mx-auto max-w-6xl scroll-mt-20 px-6 pb-28">
+            <Reveal className="mb-10 text-center">
+              <Eyebrow>Plans</Eyebrow>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Start free. Grow when your room does.</h2>
+            </Reveal>
+            <div className="grid overflow-hidden rounded-3xl border border-slate-200 bg-white md:grid-cols-[1.3fr_1fr_1fr] md:divide-x divide-y md:divide-y-0 divide-slate-200">
+              {PLANS.map(([name, note, items], i) => (
+                <div key={name} className={`p-7 ${i === 0 ? "bg-[#6495c4]/[0.06]" : "text-slate-500"}`}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className={`text-xl font-bold ${i === 0 ? "text-slate-900" : ""}`}>{name}</h3>
+                    <span className={`text-xs font-semibold ${i === 0 ? "text-[#6495c4]" : "text-slate-400"}`}>{note}</span>
+                  </div>
+                  <ul className="mt-5 space-y-2.5 text-sm">
+                    {items.map((it) => (
+                      <li key={it} className="flex gap-2.5">
+                        <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${i === 0 ? "bg-[#6495c4]" : "bg-slate-300"}`} />
+                        {it}
+                      </li>
+                    ))}
+                  </ul>
+                  {i === 0 && <button onClick={() => setOpen(true)} className={`${darkBtn} mt-7 w-full`}>Start a free meeting</button>}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. FAQ and final call to action */}
+          <section id="faq" className="mx-auto max-w-3xl scroll-mt-20 px-6 pb-24">
+            <Reveal className="mb-10 text-center">
+              <Eyebrow>FAQ</Eyebrow>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Questions about Selah video meetings</h2>
+            </Reveal>
+            <div className="divide-y divide-slate-200 border-y border-slate-200">
+              {FAQS.map(([q, a]) => (
+                <details key={q} className="group py-5 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold focus-visible:outline-2 focus-visible:outline-[#6495c4]">
+                    {q}
+                    <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0 text-slate-400 transition duration-200 group-open:rotate-45 motion-reduce:transition-none" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                      <path d="M8 3v10M3 8h10" />
+                    </svg>
+                  </summary>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{a}</p>
+                </details>
+              ))}
+            </div>
+
+            <Reveal className="mt-20 rounded-3xl bg-slate-900 px-8 py-14 text-center">
+              <h2 className="mx-auto text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">Give your next large video meeting some order.</h2>
+              <p className="mx-auto mt-3  text-slate-300">Start a free Selah, share the link, and let the queue keep every voice heard.</p>
+              <button onClick={() => setOpen(true)} className="mt-8 inline-flex items-center rounded-full bg-white px-7 py-3 text-sm font-semibold text-slate-900 transition hover:bg-[#6495c4] hover:text-white active:scale-[0.98]">
+                Start a free meeting
+              </button>
+            </Reveal>
+          </section>
+        </main>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-200 px-6 py-12">
+          <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-xs">
+              <a href="#top"><img src={Selah} alt="Selah" className="w-20" /></a>
+              <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                Video conferencing for large groups, with a raise-hand speaking queue so every voice gets a turn.
+              </p>
+            </div>
+            <nav aria-label="Footer" className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm text-slate-600">
+              {FOOTER_LINKS.map(([l, h]) => (
+                <a key={l} href={h} className="transition hover:text-slate-900">{l}</a>
+              ))}
+              <a href="#" className="transition hover:text-slate-900">Privacy policy</a>
+              <a href="#" className="transition hover:text-slate-900">Terms of use</a>
+            </nav>
+          </div>
+          <div className="mx-auto mt-10 flex max-w-6xl flex-col justify-between gap-2 border-t border-slate-200 pt-6 text-sm text-slate-500 sm:flex-row">
+            <span>&copy; {new Date().getFullYear()} Selah. All rights reserved.</span>
+            <span>
+              A product of{" "}
+              {COMPANY.url ? (
+                <a href={COMPANY.url} className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4">{COMPANY.name}</a>
+              ) : (
+                <span className="font-semibold text-[#6495c4]">{COMPANY.name}</span>
+              )}
+            </span>
+          </div>
+        </footer>
+
+        <StartModal open={open} onClose={() => setOpen(false)} onEnter={onEnter} onMeetingCreated={refreshMeetings} />
+      </div>
+    </MotionConfig>
   );
 }

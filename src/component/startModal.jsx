@@ -136,7 +136,7 @@ export default function StartModal({ open, onClose, onEnter, onMeetingCreated })
         {!code ? (
           <form onSubmit={create}>
             <h2 id="start-title" className="pr-8 text-2xl font-semibold tracking-tight">Start a Selah</h2>
-            <p className="mt-1 text-sm text-slate-600">Name it, pick how the floor works, and get a link to share.</p>
+            <p className="mt-1 text-sm text-slate-600">Name it, and get a link to share.</p>
 
             <label htmlFor="meeting-name" className="mt-6 block text-sm font-medium">
               Meeting name <span className="font-normal text-slate-400">(optional)</span>

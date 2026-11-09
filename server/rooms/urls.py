@@ -1,8 +1,8 @@
 from django.urls import path
 
 from . import views
-
-urlpatterns = [
+       
+urlpatterns = [    
     path("rooms/", views.CreateRoom.as_view()),
     path("rooms/<str:code>/claim-host/", views.ClaimHost.as_view()),
     path("rooms/<str:code>/join/", views.JoinRoom.as_view()),

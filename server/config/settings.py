@@ -63,7 +63,13 @@ TEMPLATES = [
     }
 ]
 
-DATABASE_URL = env("DATABASE_URL").strip()
+USE_PRODUCTION_DATABASE = env("USE_PRODUCTION_DB", "0") == "1"
+DATABASE_URL = env("DATABASE_URL", "").strip()
+
+# Local development should default to SQLite unless production is explicitly opted in.
+if DEBUG and not USE_PRODUCTION_DATABASE:
+    DATABASE_URL = ""
+
 if DATABASE_URL.startswith(("http://", "https://")):
     raise ImproperlyConfigured(
         "DATABASE_URL must be a database connection string (postgresql://...), not an https:// project URL. "
@@ -78,7 +84,16 @@ if DATABASE_URL:
         )
     }
 else:
-    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {
+                "timeout": 20,
+                "transaction_mode": "IMMEDIATE",
+            },
+        }
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "static/"

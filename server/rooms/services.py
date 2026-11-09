@@ -507,7 +507,7 @@ def submit_question(code, actor_identity, text, kind, anonymous=False):
         if anonymous and not room.anonymous_questions_enabled:
             raise RoomError("Anonymous questions are disabled by the host.", 403)
         now = timezone.now()
-        questions = Question.objects.filter(room=room, sender=participant)
+        questions = Question.objects.filter(room=room, sender=participant, deleted_by_sender=False)
         if questions.count() >= 5:
             raise RoomError("You have reached the five-question limit for this meeting.", 429)
         if questions.filter(created_at__gte=now - timedelta(seconds=20)).exists():

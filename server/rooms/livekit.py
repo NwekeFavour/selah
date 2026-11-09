@@ -10,6 +10,7 @@ from datetime import timedelta
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from livekit import api
+from livekit.api.twirp_client import ServerError
 from livekit.protocol.models import TrackType
 
 log = logging.getLogger(__name__)
@@ -110,11 +111,16 @@ class LiveKit:
                     await lk.room.remove_participant(api.RoomParticipantIdentity(room=room_code, identity=identity))
                 except Exception:
                     log.warning("Could not remove %s from %s", identity, room_code)
-            await lk.room.send_data(
-                api.SendDataRequest(
-                    room=room_code, data=payload, kind=api.DataPacket.Kind.RELIABLE, topic=STATE_TOPIC
+            try:
+                await lk.room.send_data(
+                    api.SendDataRequest(
+                        room=room_code, data=payload, kind=api.DataPacket.Kind.RELIABLE, topic=STATE_TOPIC
+                    )
                 )
-            )
+            except ServerError as error:
+                if error.status != 404:
+                    raise
+                log.debug("Skipping state broadcast; LiveKit room %s does not exist yet", room_code)
         finally:
             await lk.aclose()
 
