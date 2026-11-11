@@ -106,8 +106,13 @@ host flow. In Selah production, include the Selah frontend origin in
 
 ## Deploy notes
 
-- Run `gunicorn config.wsgi` behind HTTPS, and `python manage.py sweep` as a second always-on process
-  (for example two systemd units).
+- On Render, set the service root directory to `server`, the build command to
+  `pip install -r requirements.txt`, and the start command to `bash start.sh`. This applies pending
+  migrations before Gunicorn starts.
+- Use a persistent PostgreSQL database and set its connection string as `DATABASE_URL`. Production
+  settings reject SQLite so a missing database configuration cannot silently create an ephemeral
+  deployment-local database.
+- Run `python manage.py sweep` as a second always-on process (for example two systemd units).
 - Set `DJANGO_DEBUG=0`, a real `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` and
   `DATABASE_URL` (your Supabase Postgres connection string).
 

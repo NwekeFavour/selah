@@ -87,9 +87,16 @@ export default function Room({
           connect={endingAt === null}
           audio={false}
           video={false}
+          options={{
+            audioCaptureDefaults: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          }}
           onDisconnected={handleLiveKitDisconnected}
           className="min-h-screen bg-[#F2F2F7] text-slate-900 antialiased md:h-screen"
-        >
+        >   
           <RoomAudioRenderer />
           <StartAudio
             label="Tap to resume call audio"

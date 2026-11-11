@@ -70,6 +70,9 @@ DATABASE_URL = env("DATABASE_URL", "").strip()
 if DEBUG and not USE_PRODUCTION_DATABASE:
     DATABASE_URL = ""
 
+if not DEBUG and not DATABASE_URL:
+    raise ImproperlyConfigured("Set DATABASE_URL to a persistent production database.")
+
 if DATABASE_URL.startswith(("http://", "https://")):
     raise ImproperlyConfigured(
         "DATABASE_URL must be a database connection string (postgresql://...), not an https:// project URL. "
